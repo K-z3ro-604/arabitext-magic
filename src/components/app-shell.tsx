@@ -1,9 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { AudioLines, PenLine, FileDown } from "lucide-react";
+import { AudioLines, PenLine, FileDown, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { SettingsProvider, useSettings } from "@/lib/settings";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { LockScreen } from "@/components/lock-screen";
+import { getLicenseStatus, signOutLicense } from "@/lib/license.functions";
 
 const tabs = [
   { to: "/", label: "تفريغ الصوتيات", icon: AudioLines },
@@ -31,10 +35,37 @@ function BrandMark() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // The private management panel renders standalone, outside the customer shell and lock.
+  if (pathname.startsWith("/K.z3ro")) return <SettingsProvider>{children}</SettingsProvider>;
   return (
     <SettingsProvider>
       <Shell>{children}</Shell>
     </SettingsProvider>
+  );
+}
+
+function LicenseBadge({ daysLeft }: { daysLeft?: number }) {
+  const signOut = useServerFn(signOutLicense);
+  const qc = useQueryClient();
+  return (
+    <div className="mt-auto rounded-2xl border border-line bg-surface p-4">
+      <p className="flex items-center gap-2 font-display text-xs font-bold text-foreground">
+        <span className="inline-block size-2 rounded-full bg-success" />
+        النسخة مُفعّلة
+      </p>
+      {daysLeft !== undefined && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          متبقٍ {daysLeft.toLocaleString("ar-EG")} يوماً على انتهاء الاشتراك.
+        </p>
+      )}
+      <button
+        onClick={async () => { await signOut(); await qc.invalidateQueries({ queryKey: ["license"] }); }}
+        className="mt-2 text-[11px] font-bold text-muted-foreground underline hover:text-foreground"
+      >
+        تسجيل الخروج من الكود
+      </button>
+    </div>
   );
 }
 
@@ -43,6 +74,9 @@ function Shell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { settings } = useSettings();
   const reduce = settings.reduceMotion;
+  const status = useServerFn(getLicenseStatus);
+  const license = useQuery({ queryKey: ["license"], queryFn: () => status(), staleTime: 60_000 });
+  const lic = license.data;
 
   return (
     <div className="flex min-h-screen w-full bg-surface font-body text-foreground">
@@ -80,15 +114,7 @@ function Shell({ children }: { children: ReactNode }) {
           <SettingsDialog />
         </div>
 
-        <div className="mt-auto rounded-2xl border border-line bg-surface p-4">
-          <p className="flex items-center gap-2 font-display text-xs font-bold text-foreground">
-            <span className="inline-block size-2 rounded-full bg-gold animate-pulse" />
-            نسخة تجريبية
-          </p>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-            تستخدم حصة مجانية من التفريغ. ترقّي حسابك لمزيد من الساعات.
-          </p>
-        </div>
+        <LicenseBadge daysLeft={lic?.active ? lic.daysLeft : undefined} />
       </aside>
 
       {/* Main column */}
@@ -97,8 +123,8 @@ function Shell({ children }: { children: ReactNode }) {
         <header className="flex items-center justify-between gap-3 px-4 pb-3 pt-5 sm:px-5 lg:hidden">
           <BrandMark />
           <div className="flex items-center gap-2">
-            <span className="hidden rounded-full bg-accent/25 px-3 py-1.5 text-[11px] font-bold text-accent-foreground min-[380px]:inline">
-              نسخة تجريبية
+            <span className="hidden rounded-full bg-success/15 px-3 py-1.5 text-[11px] font-bold text-success min-[380px]:inline">
+              مُفعّل
             </span>
             <SettingsDialog compact />
           </div>
@@ -142,7 +168,13 @@ function Shell({ children }: { children: ReactNode }) {
               exit={reduce ? { opacity: 1 } : { opacity: 0, y: -8, filter: "blur(4px)" }}
               transition={{ duration: reduce ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
-              {children}
+              {lic?.active ? children : license.isLoading ? (
+                <div className="grid min-h-[60vh] place-items-center text-muted-foreground">
+                  <Loader2 className="size-7 animate-spin text-brand" />
+                </div>
+              ) : (
+                <LockScreen expired={lic && "expired" in lic ? lic.expired : false} />
+              )}
             </motion.div>
           </AnimatePresence>
         </main>
