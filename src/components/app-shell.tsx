@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function LicenseBadge({ daysLeft }: { daysLeft?: number }) {
+function LicenseBadge({ daysLeft }: { daysLeft?: number | undefined }) {
   const signOut = useServerFn(signOutLicense);
   const qc = useQueryClient();
   return (
