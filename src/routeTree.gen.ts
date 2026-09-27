@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as KDotz3roRouteImport } from './routes/K[.]z3ro'
 import { Route as ExportRouteImport } from './routes/export'
 import { Route as ReviewRouteImport } from './routes/review'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KDotz3roRoute = KDotz3roRouteImport.update({
+  id: '/K.z3ro',
+  path: '/K.z3ro',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExportRoute = ExportRouteImport.update({
@@ -31,30 +37,34 @@ const ReviewRoute = ReviewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/K.z3ro': typeof KDotz3roRoute
   '/export': typeof ExportRoute
   '/review': typeof ReviewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/K.z3ro': typeof KDotz3roRoute
   '/export': typeof ExportRoute
   '/review': typeof ReviewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/K.z3ro': typeof KDotz3roRoute
   '/export': typeof ExportRoute
   '/review': typeof ReviewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/export' | '/review'
+  fullPaths: '/' | '/K.z3ro' | '/export' | '/review'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/export' | '/review'
-  id: '__root__' | '/' | '/export' | '/review'
+  to: '/' | '/K.z3ro' | '/export' | '/review'
+  id: '__root__' | '/' | '/K.z3ro' | '/export' | '/review'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  KDotz3roRoute: typeof KDotz3roRoute
   ExportRoute: typeof ExportRoute
   ReviewRoute: typeof ReviewRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/K.z3ro': {
+      id: '/K.z3ro'
+      path: '/K.z3ro'
+      fullPath: '/K.z3ro'
+      preLoaderRoute: typeof KDotz3roRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/export': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  KDotz3roRoute: KDotz3roRoute,
   ExportRoute: ExportRoute,
   ReviewRoute: ReviewRoute,
 }
