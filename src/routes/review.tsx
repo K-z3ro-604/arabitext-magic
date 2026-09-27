@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   SpellCheck2,
   Sparkles,
@@ -10,7 +11,10 @@ import {
   Check,
   Eraser,
   ClipboardPaste,
+  Baseline,
 } from "lucide-react";
+import { processArabicText } from "@/lib/ai.functions";
+import { loadDocument, saveDocument, stripDiacritics } from "@/lib/document";
 
 export const Route = createFileRoute("/review")({
   head: () => ({
@@ -26,27 +30,7 @@ export const Route = createFileRoute("/review")({
   component: ReviewPage,
 });
 
-const SAMPLE = `ان الكتابه الصحيحه مهمه جدا في حياتنا اليوميه. ذهبت الى المكتبه لكي اشتري كتاب جديد عن اللغه العربيه، ولاكن لم اجد ما ابحث عنه. هاذا الامر جعلني افكر في انشاء مكتبه صغيره في البيت.`;
-
-const GRAMMAR_FIXES: Record<string, string> = {
-  ان: "إن", الكتابه: "الكتابة", الصحيحه: "الصحيحة", مهمه: "مهمة", جدا: "جدًا",
-  اليوميه: "اليومية", الى: "إلى", المكتبه: "المكتبة", اشتري: "أشتري",
-  كتاب: "كتابًا", جديد: "جديدًا", اللغه: "اللغة", العربيه: "العربية",
-  ولاكن: "ولكن", اجد: "أجد", ابحث: "أبحث", هاذا: "هذا", الامر: "الأمر",
-  افكر: "أفكر", انشاء: "إنشاء", مكتبه: "مكتبة", صغيره: "صغيرة",
-  اذا: "إذا", انا: "أنا", هاذه: "هذه", لاكن: "لكن", مسؤول: "مسؤول",
-};
-
-const DIACRITICS: Record<string, string> = {
-  إن: "إِنَّ", ان: "إِنَّ", الكتابة: "الكِتَابَةَ", الكتابه: "الكِتَابَةَ", الصحيحة: "الصَّحِيحَةَ",
-  مهمة: "مُهِمَّةٌ", جدًا: "جِدًّا", جدا: "جِدًّا", في: "فِي", حياتنا: "حَيَاتِنَا",
-  اليومية: "اليَوْمِيَّةِ", ذهبت: "ذَهَبْتُ", إلى: "إِلَى", الى: "إِلَى", المكتبة: "المَكْتَبَةِ",
-  لكي: "لِكَيْ", أشتري: "أَشْتَرِيَ", كتابًا: "كِتَابًا", جديدًا: "جَدِيدًا", عن: "عَنِ",
-  اللغة: "اللُّغَةِ", العربية: "العَرَبِيَّةِ", ولكن: "وَلَكِنْ", لم: "لَمْ", أجد: "أَجِدْ",
-  ما: "مَا", أبحث: "أَبْحَثُ", عنه: "عَنْهُ", هذا: "هَذَا", الأمر: "الأَمْرُ",
-  جعلني: "جَعَلَنِي", أفكر: "أُفَكِّرُ", إنشاء: "إِنْشَاءِ", مكتبة: "مَكْتَبَةٍ",
-  صغيرة: "صَغِيرَةٍ", البيت: "البَيْتِ", من: "مِنْ", على: "عَلَى", هذه: "هَذِهِ",
-};
+const SAMPLE = `ان الكتابه الصحيحه مهمه جدا في حياتنا اليوميه. ذهبت الى المكتبه لكي اشتري كتاب جديد عن اللغه العربيه، ولاكن لم اجد ما ابحث عنه.`;
 
 type Token = { type: "same" | "del" | "add"; text: string };
 
@@ -55,17 +39,12 @@ function tokenize(s: string) {
   return s.split(/(\s+|[،.؛:!؟,?])/).filter((t) => t !== "");
 }
 
-function transform(text: string, map: Record<string, string>) {
-  return tokenize(text)
-    .map((t) => map[t] ?? t)
-    .join("");
-}
-
 // Word-level LCS diff
 function diff(a: string, b: string): Token[] {
   const x = tokenize(a);
   const y = tokenize(b);
   const n = x.length, m = y.length;
+  if (n * m > 4_000_000) return [{ type: "add", text: b }];
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
   const at = (i: number, j: number) => dp[i]![j]!;
   for (let i = n - 1; i >= 0; i--)
@@ -83,14 +62,30 @@ function diff(a: string, b: string): Token[] {
   return out;
 }
 
-type Mode = "grammar" | "diacritics";
+type Mode = "grammar" | "full" | "endings" | "strip";
+
+const LOADING_TEXT: Record<Mode, string> = {
+  grammar: "جاري التدقيق…",
+  full: "جاري التشكيل الكامل…",
+  endings: "جاري تشكيل أواخر الكلمات…",
+  strip: "جاري إزالة التشكيل…",
+};
 
 function ReviewPage() {
-  const [input, setInput] = useState(SAMPLE);
+  const [input, setInputState] = useState(SAMPLE);
   const [result, setResult] = useState<{ original: string; corrected: string; mode: Mode } | null>(null);
   const [loading, setLoading] = useState<Mode | null>(null);
+  const [error, setError] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [copied, setCopied] = useState(false);
+  const processText = useServerFn(processArabicText);
+
+  useEffect(() => {
+    const saved = loadDocument();
+    if (saved) setInputState(saved);
+  }, []);
+
+  const setInput = (t: string) => { setInputState(t); saveDocument(t); };
 
   const tokens = useMemo(
     () => (result ? diff(result.original, result.corrected) : []),
@@ -98,17 +93,23 @@ function ReviewPage() {
   );
   const changeCount = tokens.filter((t) => t.type === "add").length;
 
-  const run = (mode: Mode) => {
+  const run = async (mode: Mode) => {
     if (!input.trim() || loading) return;
-    setLoading(mode);
     setAccepted(false);
-    setTimeout(() => {
-      const corrected = mode === "grammar"
-        ? transform(input, GRAMMAR_FIXES)
-        : transform(input, DIACRITICS);
-      setResult({ original: input, corrected, mode });
+    setError("");
+    if (mode === "strip") {
+      setResult({ original: input, corrected: stripDiacritics(input), mode });
+      return;
+    }
+    setLoading(mode);
+    try {
+      const r = await processText({ data: { text: input, mode } });
+      setResult({ original: input, corrected: r.text, mode });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذّرت المعالجة");
+    } finally {
       setLoading(null);
-    }, 1200);
+    }
   };
 
   const applyToInput = () => {
@@ -125,6 +126,13 @@ function ReviewPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const tools: { mode: Mode; label: string; icon: typeof Sparkles; cls: string }[] = [
+    { mode: "full", label: "تشكيل كامل", icon: Sparkles, cls: "bg-gold text-accent-foreground shadow-gold" },
+    { mode: "endings", label: "تشكيل أواخر الكلمات", icon: Baseline, cls: "bg-card text-foreground border border-line" },
+    { mode: "strip", label: "إزالة التشكيل", icon: Eraser, cls: "bg-card text-foreground border border-line" },
+    { mode: "grammar", label: "تدقيق نحوي وإملائي", icon: SpellCheck2, cls: "bg-brand text-primary-foreground shadow-brand" },
+  ];
+
   return (
     <div className="mx-auto w-full max-w-6xl px-5 pb-12 pt-2 lg:px-10 lg:pt-10">
       <section className="mt-1 lg:mt-0">
@@ -132,28 +140,25 @@ function ReviewPage() {
           التدقيق <span className="text-brand">والتشكيل</span>
         </h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground md:text-sm">
-          الصق نصك على اليمين، ثم اختر التشكيل أو التدقيق لترى التعديلات ملوّنة على اليسار.
+          الصق نصك على اليمين، ثم اختر أداة من الشريط لترى التعديلات ملوّنة على اليسار.
         </p>
       </section>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button
-          onClick={() => run("diacritics")}
-          disabled={!!loading || !input.trim()}
-          className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-3 font-display text-sm font-extrabold text-accent-foreground shadow-gold transition hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
-        >
-          {loading === "diacritics" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          تشكيل النص
-        </button>
-        <button
-          onClick={() => run("grammar")}
-          disabled={!!loading || !input.trim()}
-          className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 font-display text-sm font-extrabold text-primary-foreground shadow-brand transition hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
-        >
-          {loading === "grammar" ? <Loader2 className="size-4 animate-spin" /> : <SpellCheck2 className="size-4" />}
-          تدقيق نحوي وإملائي
-        </button>
+      <div role="toolbar" aria-label="أدوات التشكيل والتحكم" className="mt-6 flex flex-wrap items-center gap-2 rounded-3xl border border-line bg-surface p-2">
+        <span className="px-2 font-display text-xs font-bold text-muted-foreground">أدوات التشكيل والتحكم</span>
+        {tools.map((t) => (
+          <button
+            key={t.mode}
+            onClick={() => run(t.mode)}
+            disabled={!!loading || !input.trim()}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 font-display text-sm font-extrabold transition hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 ${t.cls}`}
+          >
+            {loading === t.mode ? <Loader2 className="size-4 animate-spin" /> : <t.icon className="size-4" />}
+            {t.label}
+          </button>
+        ))}
       </div>
+      {error && <p className="mt-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-bold text-destructive">{error}</p>}
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         {/* Input — first child sits on the right in RTL */}
@@ -214,7 +219,7 @@ function ReviewPage() {
             {loading ? (
               <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-3 text-muted-foreground">
                 <Loader2 className="size-8 animate-spin text-brand" />
-                <p className="text-sm">{loading === "grammar" ? "جاري التدقيق…" : "جاري التشكيل…"}</p>
+                <p className="text-sm">{LOADING_TEXT[loading]}</p>
               </div>
             ) : !result ? (
               <div className="flex h-full min-h-[300px] items-center justify-center text-center text-sm text-muted-foreground">

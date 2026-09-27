@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { FileText, FileDown, Loader2, Type, Baseline, Maximize, AlignJustify } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileText, FileDown, Loader2, Type, Baseline, Maximize, AlignJustify, Frame, BookOpen } from "lucide-react";
+import { BookFrame, FootnoteRule, HeadingOrnament } from "@/components/book-ornament";
+import { loadDocument } from "@/lib/document";
 
 export const Route = createFileRoute("/export")({
   head: () => ({
     meta: [
       { title: "تنسيق وتصدير — صوتُك" },
-      { name: "description", content: "نسّق النص النهائي ككتاب مع معاينة A4 حيّة وصدّره إلى Word أو PDF." },
+      { name: "description", content: "نسّق النص النهائي كصفحة كتاب علمي مزخرفة مع معاينة A4 حيّة وصدّره إلى Word أو PDF." },
       { property: "og:title", content: "تنسيق وتصدير — صوتُك" },
-      { property: "og:description", content: "نسّق نصك ككتاب وصدّره إلى Word أو PDF بضغطة واحدة." },
+      { property: "og:description", content: "نسّق نصك ككتاب علمي وصدّره إلى Word أو PDF بضغطة واحدة." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -16,21 +18,26 @@ export const Route = createFileRoute("/export")({
   component: ExportPage,
 });
 
-const BOOK = {
-  title: "حديث الاستوديو",
-  chapter: "الفصل الأول: بداية الحكاية",
-  paragraphs: [
-    "في بداية الحلقة، استقبلنا سؤالاً من أحد المستمعين حول أفضل الطرق لبناء قاعدة بيانات مستخدمين آمنة. بدأنا الحديث عن أهمية التشفير، ثم انتقلنا إلى شرح عملي لطريقة التحقق من البريد الإلكتروني عبر الرسائل القصيرة.",
-    "وفي الجزء التالي، فصّلنا تجربة المستخدمين على الجوال وكيف نوازن بين السرعة وضغط الصور، مع أمثلة عملية من مشاريع حقيقية واجهناها خلال العام الماضي.",
-    "إنَّ الكتابةَ الصحيحةَ مهمةٌ جدًّا في حياتنا اليومية، فهي الجسر الذي تعبر عليه الأفكار من عقل إلى آخر، وبها تُحفظ المعارف وتنتقل عبر الأجيال.",
-    "وختاماً، نشكر كل من شاركنا بسؤاله أو تعليقه، ونعدكم بحلقات قادمة أكثر ثراءً وعمقاً، نناقش فيها قضايا التقنية بلغة عربية سليمة وأسلوب قريب من القلب.",
-  ],
-};
+const SAMPLE_TEXT = `إنَّ الكتابةَ الصحيحةَ مهمةٌ جدًّا في حياتنا اليومية، فهي الجسر الذي تعبر عليه الأفكار من عقل إلى آخر، وبها تُحفظ المعارف وتنتقل عبر الأجيال (١).
+
+وقد عُني العلماء قديمًا بضبط النصوص وتحريرها، فوضعوا لذلك قواعد دقيقة في الرواية والنسخ والمقابلة، حتى صار علم التحقيق فنًّا قائمًا بذاته.
+
+[١] انظر: مقدمة ابن خلدون، فصل في صناعة الخط والكتابة.`;
+
+const FOOTNOTE_RE = /^\s*[[(]\s*[0-9٠-٩]+\s*[\])]\s*/;
+
+function parseDocument(text: string) {
+  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  return {
+    paragraphs: lines.filter((l) => !FOOTNOTE_RE.test(l)),
+    footnotes: lines.filter((l) => FOOTNOTE_RE.test(l)),
+  };
+}
 
 const FONTS = [
   { label: "أميري (Amiri)", value: "Amiri" },
+  { label: "شهرزاد (Scheherazade New)", value: "Scheherazade New" },
   { label: "نسخ (Noto Naskh)", value: "Noto Naskh Arabic" },
-  { label: "شهرزاد (Scheherazade)", value: "Scheherazade New" },
   { label: "القاهرة (Cairo)", value: "Cairo" },
   { label: "تجوّل (Tajawal)", value: "Tajawal" },
 ];
@@ -61,19 +68,28 @@ function flattenOklchVars() {
   return () => changed.forEach((n) => root.style.removeProperty(n));
 }
 
-function slugName(ext: string) {
-  return `${BOOK.title.replace(/\s+/g, "-")}.${ext}`;
-}
-
 function ExportPage() {
   const [font, setFont] = useState("Amiri");
   const [size, setSize] = useState(16); // pt
   const [margin, setMargin] = useState(25); // mm
   const [lineHeight, setLineHeight] = useState(1.8);
+  const [ornate, setOrnate] = useState(true);
+  const [title, setTitle] = useState("رسالة في فن الكتابة");
+  const [chapter, setChapter] = useState("الباب الأول: في فضل العلم");
+  const [text, setText] = useState(SAMPLE_TEXT);
   const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
   const [scale, setScale] = useState(1);
   const wrapRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const saved = loadDocument();
+    if (saved.trim()) setText(saved);
+  }, []);
+
+  const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(text) }), [title, chapter, text]);
+  const slugName = (ext: string) => `${(title || "كتاب").replace(/\s+/g, "-")}.${ext}`;
+  const padding = Math.max(margin * MM, ornate ? 72 : 0);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -133,22 +149,28 @@ function ExportPage() {
   const exportDocx = async () => {
     setBusy("docx");
     try {
-      const { Document, Packer, Paragraph, TextRun, AlignmentType } = await import("docx");
+      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } = await import("docx");
       const twip = (mm: number) => Math.round(mm * 56.7);
       const line = Math.round(240 * lineHeight);
       const run = (text: string, pt: number, bold = false) =>
         new TextRun({ text, font, size: pt * 2, bold, rightToLeft: true });
+      const border = { style: BorderStyle.DOUBLE, size: 12, color: "8A6A2F", space: 24 };
+      const pageMargin = twip(Math.max(margin, ornate ? 22 : 0));
       const doc = new Document({
         sections: [
           {
             properties: {
               page: {
                 size: { width: 11906, height: 16838 },
-                margin: { top: twip(margin), bottom: twip(margin), left: twip(margin), right: twip(margin) },
+                margin: { top: pageMargin, bottom: pageMargin, left: pageMargin, right: pageMargin },
+                ...(ornate
+                  ? { borders: { pageBorderTop: border, pageBorderBottom: border, pageBorderLeft: border, pageBorderRight: border } }
+                  : {}),
               },
             },
             children: [
-              new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [run(BOOK.title, size + 10, true)] }),
+              new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [run(BOOK.title, size + 10, true)] }),
+              new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: "❁", color: "8A6A2F", size: 24 })] }),
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [run(BOOK.chapter, size + 3, true)] }),
               ...BOOK.paragraphs.map(
                 (p) =>
@@ -160,6 +182,20 @@ function ExportPage() {
                     children: [run(p, size)],
                   }),
               ),
+              ...(BOOK.footnotes.length
+                ? [
+                    new Paragraph({
+                      bidirectional: true,
+                      spacing: { before: 400, after: 80 },
+                      indent: { left: 6000 },
+                      border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "8A6A2F", space: 1 } },
+                      children: [],
+                    }),
+                    ...BOOK.footnotes.map(
+                      (f) => new Paragraph({ bidirectional: true, alignment: AlignmentType.BOTH, spacing: { after: 60 }, children: [run(f, Math.max(9, size - 4))] }),
+                    ),
+                  ]
+                : []),
             ],
           },
         ],
@@ -191,6 +227,21 @@ function ExportPage() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[300px_1fr]">
         <aside className="flex flex-col gap-5 self-start rounded-3xl border border-line bg-card p-5 shadow-card">
+          <Control icon={<BookOpen className="size-4 text-brand" />} label="عنوان الكتاب">
+            <input value={title} onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring" />
+          </Control>
+          <Control icon={<BookOpen className="size-4 text-brand" />} label="عنوان الباب / الفصل">
+            <input value={chapter} onChange={(e) => setChapter(e.target.value)}
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring" />
+          </Control>
+          <Control icon={<AlignJustify className="size-4 text-brand" />} label="متن النص">
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6}
+              className="w-full resize-y rounded-xl border border-line bg-surface px-3 py-2.5 text-sm leading-7 text-foreground outline-none focus:ring-2 focus:ring-ring" />
+            <span className="text-[11px] leading-relaxed text-muted-foreground">
+              للحواشي: ابدأ السطر برقم بين قوسين مثل [١] ليظهر أسفل الصفحة تحت الفاصل.
+            </span>
+          </Control>
           <Control icon={<Type className="size-4 text-brand" />} label="نوع الخط">
             <select
               value={font}
@@ -202,9 +253,24 @@ function ExportPage() {
               ))}
             </select>
           </Control>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={ornate}
+            onClick={() => setOrnate((v) => !v)}
+            className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-start"
+          >
+            <span className="flex items-center gap-2 font-display text-sm font-bold text-foreground">
+              <Frame className="size-4 text-brand" /> الإطار الزخرفي العلمي
+            </span>
+            <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${ornate ? "bg-brand" : "bg-border"}`}>
+              <span className={`absolute top-1 size-4 rounded-full bg-card shadow transition-all ${ornate ? "start-6" : "start-1"}`} />
+            </span>
+          </button>
           <Slider icon={<Baseline className="size-4 text-brand" />} label="حجم الخط" value={size} min={11} max={24} step={1} unit="نقطة" onChange={setSize} />
           <Slider icon={<Maximize className="size-4 text-brand" />} label="هوامش الصفحة" value={margin} min={10} max={40} step={1} unit="مم" onChange={setMargin} />
           <Slider icon={<AlignJustify className="size-4 text-brand" />} label="تباعد الأسطر" value={lineHeight} min={1.2} max={2.6} step={0.1} unit="×" onChange={setLineHeight} />
+
 
           <div className="mt-2 flex flex-col gap-3">
             <button
@@ -236,26 +302,42 @@ function ExportPage() {
                   dir="rtl"
                   className="bg-card text-card-foreground shadow-card"
                   style={{
+                    position: "relative",
+                    display: "flex",
+                    flexDirection: "column",
                     width: A4_W,
                     minHeight: 1123,
-                    padding: margin * MM,
-                    fontFamily: `'${font}', serif`,
+                    padding,
+                    fontFamily: `'${font}', 'Amiri', serif`,
                     fontSize: pxSize,
                     lineHeight,
                     boxSizing: "border-box",
                   }}
                 >
-                  <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.4 }}>
+                  {ornate && <BookFrame width={A4_W} height={1123} />}
+                  <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
                     {BOOK.title}
                   </h1>
-                  <div className="mx-auto mb-6 h-px w-24 bg-border" />
-                  <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.4 }}>
+                  <div style={{ marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>
+                  <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.2 }}>
                     {BOOK.chapter}
                   </h2>
                   {BOOK.paragraphs.map((p, i) => (
                     <p key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
                   ))}
-                  <p className="mt-10 text-center text-muted-foreground" style={{ fontSize: pxSize * 0.8 }}>— ١ —</p>
+                  <div style={{ marginTop: "auto" }}>
+                    {BOOK.footnotes.length > 0 && (
+                      <div style={{ paddingTop: pxSize * 1.2 }}>
+                        <FootnoteRule />
+                        <div style={{ marginTop: pxSize * 0.4, fontSize: pxSize * 0.78, lineHeight: 1.7 }}>
+                          {BOOK.footnotes.map((f, i) => (
+                            <p key={i} style={{ textAlign: "justify", marginBottom: 2 }}>{f}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
+                  </div>
                 </div>
               </div>
             </div>

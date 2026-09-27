@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { transcribeAudio } from "@/lib/ai.functions";
+import { saveDocument } from "@/lib/document";
 import {
   Upload,
   FileAudio2,
@@ -36,9 +39,6 @@ interface PickedFile {
   isVideo: boolean;
 }
 
-const DUMMY_TRANSCRIPT = `في بداية الحلقة، استقبلنا سؤالاً من أحد المستمعين حول أفضل الطرق لبناء قاعدة بيانات مستخدمين آمنة. بدأنا الحديث عن أهمية التشفير، ثم انتقلنا إلى شرح عملي لطريقة التحقق من البريد الإلكتروني عبر الرسائل القصيرة.
-
-وفي الجزء التالي، فصّلنا تجربة المستخدمين على الجوال وكيف نوازن بين السرعة وضغط الصور، مع أمثلة عملية من مشاريع حقيقية واجهناها خلال العام الماضي.`;
 
 const PROGRESS_STAGES = [
   "تحليل الموجة الصوتية…",
@@ -61,10 +61,18 @@ function Index() {
   const [dragActive, setDragActive] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [transcript, setTranscript] = useState("");
+  const [transcript, setTranscriptState] = useState("");
+  const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rawFile = useRef<File | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transcribe = useServerFn(transcribeAudio);
+
+  const setTranscript = (t: string) => {
+    setTranscriptState(t);
+    if (t) saveDocument(t);
+  };
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -76,12 +84,10 @@ function Index() {
   useEffect(() => stopTimer, [stopTimer]);
 
   const acceptFile = (f: File) => {
-    setFile({
-      name: f.name,
-      size: f.size,
-      isVideo: f.type.startsWith("video"),
-    });
-    setTranscript("");
+    rawFile.current = f;
+    setFile({ name: f.name, size: f.size, isVideo: f.type.startsWith("video") });
+    setTranscriptState("");
+    setError(f.size > 25 * 1024 * 1024 ? "الحد الأقصى لحجم الملف ٢٥ م.ب" : "");
     setProgress(0);
   };
 
@@ -92,22 +98,29 @@ function Index() {
     if (f) acceptFile(f);
   };
 
-  const startTranscription = () => {
-    if (!file || transcribing) return;
-    setTranscript("");
+  const startTranscription = async () => {
+    const f = rawFile.current;
+    if (!f || transcribing) return;
+    setTranscriptState("");
+    setError("");
     setProgress(0);
     setTranscribing(true);
     timerRef.current = setInterval(() => {
-      setProgress((p) => {
-        const next = Math.min(100, p + 2 + Math.random() * 4);
-        if (next >= 100) {
-          stopTimer();
-          setTranscribing(false);
-          setTranscript(DUMMY_TRANSCRIPT);
-        }
-        return next;
-      });
-    }, 80);
+      setProgress((p) => Math.min(92, p + Math.max(0.3, (92 - p) * 0.04)));
+    }, 250);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const r = await transcribe({ data: fd });
+      setProgress(100);
+      setTranscript(r.text);
+    } catch (e) {
+      setProgress(0);
+      setError(e instanceof Error ? e.message : "تعذّر التفريغ");
+    } finally {
+      stopTimer();
+      setTranscribing(false);
+    }
   };
 
   const stage = PROGRESS_STAGES[Math.min(2, Math.floor(progress / 34))];
@@ -173,7 +186,7 @@ function Index() {
             اسحب ملف الصوت أو الفيديو هنا
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground md:text-xs">
-            MP3 · WAV · MP4 — حتى ٥٠٠ م.ب
+            MP3 · WAV · M4A · MP4 — حتى ٢٥ م.ب
           </p>
           <button
             type="button"
@@ -218,7 +231,7 @@ function Index() {
         <button
           type="button"
           onClick={startTranscription}
-          disabled={!file || transcribing}
+          disabled={!file || transcribing || (file?.size ?? 0) > 25 * 1024 * 1024}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-4 font-display text-base font-extrabold text-background shadow-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {transcribing ? (
@@ -233,6 +246,9 @@ function Index() {
             </>
           )}
         </button>
+        {error && (
+          <p className="mt-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-bold text-destructive">{error}</p>
+        )}
 
         {/* Progress */}
         {(transcribing || progress > 0) && (
