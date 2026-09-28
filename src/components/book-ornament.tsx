@@ -3,6 +3,8 @@
 const INK = "#8a6a2f";
 const INK_SOFT = "#b89656";
 
+export type BookFrameStyle = "simple" | "classic" | "royal" | "scientific";
+
 function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   return (
     <g>
@@ -31,10 +33,18 @@ function Medallion({ cx, cy }: { cx: number; cy: number }) {
   );
 }
 
-export function BookFrame({ width, height }: { width: number; height: number }) {
+export function BookFrame({ width, height, variant = "classic" }: { width: number; height: number; variant?: BookFrameStyle }) {
   const o = 20; // outer rule inset
   const i = 34; // inner rule inset
   const mid = (o + i) / 2;
+  const cornerFlourish = (x: number, y: number, sx: number, sy: number) => (
+    <g transform={`translate(${x} ${y}) scale(${sx} ${sy})`}>
+      <path d="M0 44 C3 18 18 3 44 0 C27 8 17 19 13 36 C23 23 34 17 50 15 C33 25 24 38 23 56" fill="none" stroke={INK} strokeWidth="1.8" />
+      <path d="M8 31 C17 28 24 31 27 40 C18 43 11 39 8 31 Z" fill="none" stroke={INK_SOFT} strokeWidth="1.1" />
+      <path d="M30 8 C33 17 30 24 21 27 C18 18 22 11 30 8 Z" fill="none" stroke={INK_SOFT} strokeWidth="1.1" />
+      <circle cx="13" cy="13" r="3.2" fill={INK} />
+    </g>
+  );
   return (
     <svg
       width="100%"
@@ -46,28 +56,58 @@ export function BookFrame({ width, height }: { width: number; height: number }) 
       aria-hidden="true"
     >
       <defs>
-        <pattern id="bk-band" width="14" height="14" patternUnits="userSpaceOnUse">
+        <pattern id={`bk-band-${variant}`} width="14" height="14" patternUnits="userSpaceOnUse">
           <path d="M7 1 L13 7 L7 13 L1 7 Z" fill="none" stroke={INK_SOFT} strokeWidth="0.8" />
           <circle cx="7" cy="7" r="1.3" fill={INK} />
         </pattern>
+        <pattern id={`bk-dots-${variant}`} width="10" height="10" patternUnits="userSpaceOnUse">
+          <circle cx="5" cy="5" r="1" fill={INK_SOFT} />
+        </pattern>
       </defs>
-      {/* ornamental band between the two rules */}
-      <path
-        fillRule="evenodd"
-        fill="url(#bk-band)"
-        d={`M${o} ${o} H${width - o} V${height - o} H${o} Z M${i} ${i} V${height - i} H${width - i} V${i} Z`}
-      />
-      <rect x={o} y={o} width={width - o * 2} height={height - o * 2} fill="none" stroke={INK} strokeWidth={2.4} />
-      <rect x={o + 4} y={o + 4} width={width - (o + 4) * 2} height={height - (o + 4) * 2} fill="none" stroke={INK} strokeWidth={0.6} />
-      <rect x={i} y={i} width={width - i * 2} height={height - i * 2} fill="none" stroke={INK} strokeWidth={1.2} />
-      <rect x={i + 5} y={i + 5} width={width - (i + 5) * 2} height={height - (i + 5) * 2} fill="none" stroke={INK_SOFT} strokeWidth={0.5} />
-      {([
-        [mid, mid], [width - mid, mid], [mid, height - mid], [width - mid, height - mid],
-      ] as Array<[number, number]>).map(([x, y]) => <Star key={`${x}-${y}`} cx={x} cy={y} r={11} />)}
-      <Medallion cx={width / 2} cy={mid} />
-      <Medallion cx={width / 2} cy={height - mid} />
-      <Star cx={mid} cy={height / 2} r={7} />
-      <Star cx={width - mid} cy={height / 2} r={7} />
+      {variant === "simple" && (
+        <g>
+          <rect x={o} y={o} width={width - o * 2} height={height - o * 2} fill="none" stroke={INK} strokeWidth={2} />
+          <rect x={o + 7} y={o + 7} width={width - (o + 7) * 2} height={height - (o + 7) * 2} fill="none" stroke={INK_SOFT} strokeWidth={0.8} />
+          <path d={`M${width / 2 - 34} ${o + 7} H${width / 2 + 34} M${width / 2 - 34} ${height - o - 7} H${width / 2 + 34}`} stroke={INK} strokeWidth="2.4" />
+        </g>
+      )}
+      {variant === "classic" && (
+        <g>
+          <path fillRule="evenodd" fill={`url(#bk-band-${variant})`} d={`M${o} ${o} H${width - o} V${height - o} H${o} Z M${i} ${i} V${height - i} H${width - i} V${i} Z`} />
+          <rect x={o} y={o} width={width - o * 2} height={height - o * 2} fill="none" stroke={INK} strokeWidth={2.4} />
+          <rect x={o + 4} y={o + 4} width={width - (o + 4) * 2} height={height - (o + 4) * 2} fill="none" stroke={INK} strokeWidth={0.6} />
+          <rect x={i} y={i} width={width - i * 2} height={height - i * 2} fill="none" stroke={INK} strokeWidth={1.2} />
+          <rect x={i + 5} y={i + 5} width={width - (i + 5) * 2} height={height - (i + 5) * 2} fill="none" stroke={INK_SOFT} strokeWidth={0.5} />
+          {([[mid, mid], [width - mid, mid], [mid, height - mid], [width - mid, height - mid]] as Array<[number, number]>).map(([x, y]) => <Star key={`${x}-${y}`} cx={x} cy={y} r={11} />)}
+          <Medallion cx={width / 2} cy={mid} />
+          <Medallion cx={width / 2} cy={height - mid} />
+          <Star cx={mid} cy={height / 2} r={7} />
+          <Star cx={width - mid} cy={height / 2} r={7} />
+        </g>
+      )}
+      {variant === "royal" && (
+        <g>
+          <path fillRule="evenodd" fill={`url(#bk-dots-${variant})`} d={`M${o} ${o} H${width - o} V${height - o} H${o} Z M${i + 8} ${i + 8} V${height - i - 8} H${width - i - 8} V${i + 8} Z`} />
+          <rect x={o} y={o} width={width - o * 2} height={height - o * 2} rx="3" fill="none" stroke={INK} strokeWidth="3" />
+          <rect x={i + 8} y={i + 8} width={width - (i + 8) * 2} height={height - (i + 8) * 2} rx="2" fill="none" stroke={INK} strokeWidth="1.2" />
+          {cornerFlourish(i, i, 1, 1)}
+          {cornerFlourish(width - i, i, -1, 1)}
+          {cornerFlourish(i, height - i, 1, -1)}
+          {cornerFlourish(width - i, height - i, -1, -1)}
+          <Medallion cx={width / 2} cy={mid + 4} />
+          <Medallion cx={width / 2} cy={height - mid - 4} />
+        </g>
+      )}
+      {variant === "scientific" && (
+        <g>
+          <rect x={i} y={i} width={width - i * 2} height={height - i * 2} fill="none" stroke={INK} strokeWidth="1.2" />
+          <rect x={i + 7} y={i + 7} width={width - (i + 7) * 2} height={height - (i + 7) * 2} fill="none" stroke={INK_SOFT} strokeWidth="0.5" />
+          <path d={`M${i} ${i + 48} V${i} H${i + 48} M${width - i - 48} ${i} H${width - i} V${i + 48} M${i} ${height - i - 48} V${height - i} H${i + 48} M${width - i - 48} ${height - i} H${width - i} V${height - i - 48}`} fill="none" stroke={INK} strokeWidth="4" />
+          <circle cx={width / 2} cy={i} r="3.5" fill={INK} />
+          <circle cx={width / 2} cy={height - i} r="3.5" fill={INK} />
+          <path d={`M${width / 2 - 50} ${i} H${width / 2 - 10} M${width / 2 + 10} ${i} H${width / 2 + 50} M${width / 2 - 50} ${height - i} H${width / 2 - 10} M${width / 2 + 10} ${height - i} H${width / 2 + 50}`} stroke={INK_SOFT} strokeWidth="1" />
+        </g>
+      )}
     </svg>
   );
 }

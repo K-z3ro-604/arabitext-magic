@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, FileDown, Loader2, Type, Baseline, Maximize, AlignJustify, Frame, BookOpen } from "lucide-react";
-import { BookFrame, FootnoteRule, HeadingOrnament } from "@/components/book-ornament";
+import { BookFrame, FootnoteRule, HeadingOrnament, type BookFrameStyle } from "@/components/book-ornament";
 import { loadDocument } from "@/lib/document";
 
 export const Route = createFileRoute("/export")({
@@ -42,6 +42,13 @@ const FONTS = [
   { label: "تجوّل (Tajawal)", value: "Tajawal" },
 ];
 
+const FRAMES: Array<{ label: string; value: BookFrameStyle }> = [
+  { label: "إطار بسيط", value: "simple" },
+  { label: "إسلامي كلاسيكي", value: "classic" },
+  { label: "زهري ملكي", value: "royal" },
+  { label: "علمي مبسّط", value: "scientific" },
+];
+
 const A4_W = 794; // px @96dpi
 const MM = 3.7795; // px per mm
 const PAGE_PX_TO_PT = 0.75;
@@ -73,7 +80,7 @@ function ExportPage() {
   const [size, setSize] = useState(16); // pt
   const [margin, setMargin] = useState(25); // mm
   const [lineHeight, setLineHeight] = useState(1.8);
-  const [ornate, setOrnate] = useState(true);
+  const [frameStyle, setFrameStyle] = useState<BookFrameStyle>("classic");
   const [title, setTitle] = useState("رسالة في فن الكتابة");
   const [chapter, setChapter] = useState("الباب الأول: في فضل العلم");
   const [text, setText] = useState(SAMPLE_TEXT);
@@ -89,7 +96,7 @@ function ExportPage() {
 
   const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(text) }), [title, chapter, text]);
   const slugName = (ext: string) => `${(title || "كتاب").replace(/\s+/g, "-")}.${ext}`;
-  const padding = Math.max(margin * MM, ornate ? 72 : 0);
+  const padding = Math.max(margin * MM, 72);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -157,7 +164,7 @@ function ExportPage() {
       const run = (text: string, pt: number, bold = false) =>
         new TextRun({ text, font, size: pt * 2, bold, rightToLeft: true });
       const border = { style: BorderStyle.DOUBLE, size: 12, color: "8A6A2F", space: 24 };
-      const pageMargin = twip(Math.max(margin, ornate ? 22 : 0));
+      const pageMargin = twip(Math.max(margin, 22));
       const doc = new Document({
         sections: [
           {
@@ -165,9 +172,7 @@ function ExportPage() {
               page: {
                 size: { width: 11906, height: 16838 },
                 margin: { top: pageMargin, bottom: pageMargin, left: pageMargin, right: pageMargin },
-                ...(ornate
-                  ? { borders: { pageBorderTop: border, pageBorderBottom: border, pageBorderLeft: border, pageBorderRight: border } }
-                  : {}),
+                borders: { pageBorderTop: border, pageBorderBottom: border, pageBorderLeft: border, pageBorderRight: border },
               },
             },
             children: [
@@ -255,20 +260,15 @@ function ExportPage() {
               ))}
             </select>
           </Control>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={ornate}
-            onClick={() => setOrnate((v) => !v)}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-start"
-          >
-            <span className="flex items-center gap-2 font-display text-sm font-bold text-foreground">
-              <Frame className="size-4 text-brand" /> الإطار الزخرفي العلمي
-            </span>
-            <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${ornate ? "bg-brand" : "bg-border"}`}>
-              <span className={`absolute top-1 size-4 rounded-full bg-card shadow transition-all ${ornate ? "start-6" : "start-1"}`} />
-            </span>
-          </button>
+          <Control icon={<Frame className="size-4 text-brand" />} label="نمط إطار الصفحة">
+            <select
+              value={frameStyle}
+              onChange={(e) => setFrameStyle(e.target.value as BookFrameStyle)}
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            >
+              {FRAMES.map((frame) => <option key={frame.value} value={frame.value}>{frame.label}</option>)}
+            </select>
+          </Control>
           <Slider icon={<Baseline className="size-4 text-brand" />} label="حجم الخط" value={size} min={11} max={24} step={1} unit="نقطة" onChange={setSize} />
           <Slider icon={<Maximize className="size-4 text-brand" />} label="هوامش الصفحة" value={margin} min={10} max={40} step={1} unit="مم" onChange={setMargin} />
           <Slider icon={<AlignJustify className="size-4 text-brand" />} label="تباعد الأسطر" value={lineHeight} min={1.2} max={2.6} step={0.1} unit="×" onChange={setLineHeight} />
@@ -316,7 +316,7 @@ function ExportPage() {
                     boxSizing: "border-box",
                   }}
                 >
-                  {ornate && <BookFrame width={A4_W} height={1123} />}
+                  <BookFrame width={A4_W} height={1123} variant={frameStyle} />
                   <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
                     {BOOK.title}
                   </h1>
