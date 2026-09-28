@@ -37,10 +37,12 @@ export function BookFrame({ width, height }: { width: number; height: number }) 
   const mid = (o + i) / 2;
   return (
     <svg
-      width={width}
-      height={height}
+      width="100%"
+      height="100%"
       viewBox={`0 0 ${width} ${height}`}
-      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+      preserveAspectRatio="none"
+      className="book-ornate-frame"
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
       aria-hidden="true"
     >
       <defs>
@@ -59,9 +61,9 @@ export function BookFrame({ width, height }: { width: number; height: number }) 
       <rect x={o + 4} y={o + 4} width={width - (o + 4) * 2} height={height - (o + 4) * 2} fill="none" stroke={INK} strokeWidth={0.6} />
       <rect x={i} y={i} width={width - i * 2} height={height - i * 2} fill="none" stroke={INK} strokeWidth={1.2} />
       <rect x={i + 5} y={i + 5} width={width - (i + 5) * 2} height={height - (i + 5) * 2} fill="none" stroke={INK_SOFT} strokeWidth={0.5} />
-      {[
+      {([
         [mid, mid], [width - mid, mid], [mid, height - mid], [width - mid, height - mid],
-      ].map(([x, y]) => <Star key={`${x}-${y}`} cx={x!} cy={y!} r={11} />)}
+      ] as Array<[number, number]>).map(([x, y]) => <Star key={`${x}-${y}`} cx={x} cy={y} r={11} />)}
       <Medallion cx={width / 2} cy={mid} />
       <Medallion cx={width / 2} cy={height - mid} />
       <Star cx={mid} cy={height / 2} r={7} />

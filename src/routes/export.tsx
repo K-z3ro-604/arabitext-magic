@@ -108,7 +108,9 @@ function ExportPage() {
       const html2pdf = (await import("html2pdf.js")).default;
       await document.fonts.ready;
       const clone = pageRef.current.cloneNode(true) as HTMLElement;
-      clone.style.minHeight = "auto";
+      clone.style.width = `${A4_W}px`;
+      clone.style.minHeight = "1123px";
+      clone.style.height = "auto";
       // html2canvas can't parse oklch theme colors — use plain print colors
       [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))].forEach((el) => {
         const muted = el.classList.contains("text-muted-foreground");
@@ -215,7 +217,7 @@ function ExportPage() {
   const pxSize = size / PAGE_PX_TO_PT;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-5 pb-12 pt-2 lg:px-10 lg:pt-10">
+    <div className="export-workspace mx-auto w-full max-w-7xl px-5 pb-12 pt-2 lg:px-10 lg:pt-10">
       <section className="mt-1 lg:mt-0">
         <h1 className="font-display text-[27px] font-extrabold leading-[1.15] text-foreground md:text-4xl">
           تنسيق <span className="text-brand">وتصدير</span>
@@ -292,7 +294,7 @@ function ExportPage() {
           </div>
         </aside>
 
-        <section className="min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
+        <section className="print-preview min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
           <p className="mb-4 text-center text-xs font-bold text-muted-foreground">معاينة الطباعة · A4</p>
           <div ref={wrapRef} className="mx-auto w-full max-w-[794px]">
             <div style={{ height: 1123 * scale, overflow: "hidden" }}>
@@ -300,7 +302,7 @@ function ExportPage() {
                 <div
                   ref={pageRef}
                   dir="rtl"
-                  className="bg-card text-card-foreground shadow-card"
+                   className="a4-print-page bg-card text-card-foreground shadow-card"
                   style={{
                     position: "relative",
                     display: "flex",
