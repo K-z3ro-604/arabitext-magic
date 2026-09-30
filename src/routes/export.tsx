@@ -55,7 +55,11 @@ const MM = 3.7795; // px per mm
 const PAGE_PX_TO_PT = 0.75;
 
 function pageFits(page: HTMLElement) {
-  return page.scrollHeight <= page.clientHeight + 1;
+  const body = page.querySelector<HTMLElement>("[data-book-body]");
+  const footer = page.querySelector<HTMLElement>("[data-book-footer]");
+  const bodyFits = !body || body.scrollHeight <= body.clientHeight + 1;
+  const footerFits = !footer || footer.scrollHeight <= footer.clientHeight + 1;
+  return bodyFits && footerFits && page.scrollHeight <= page.clientHeight + 1;
 }
 
 function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
@@ -228,7 +232,7 @@ function ExportPage() {
       const html2pdf = (await import("html2pdf.js")).default;
       await document.fonts.ready;
       holder = document.createElement("div");
-      holder.style.cssText = "position:fixed;top:0;inset-inline-start:-10000px;width:210mm;background:#fff;";
+      holder.style.cssText = "position:fixed;top:0;left:0;z-index:2147483647;width:210mm;background:#fff;pointer-events:none;";
       document.body.appendChild(holder);
       const pages = buildPdfPages(pageRef.current, holder);
       if (pages.length === 0) throw new Error("تعذّر تقسيم المستند إلى صفحات");
