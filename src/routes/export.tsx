@@ -84,8 +84,9 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
   };
 
   let page = createPage();
-  let body = page.querySelector<HTMLElement>("[data-book-body]");
-  if (!body) return pages;
+  const initialBody = page.querySelector<HTMLElement>("[data-book-body]");
+  if (!initialBody) return pages;
+  let body: HTMLElement = initialBody;
   if (sourceHeader) body.appendChild(sourceHeader.cloneNode(true));
 
   const moveToNewPage = () => {
@@ -256,7 +257,6 @@ function ExportPage() {
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
         })
         .from(holder)
         .save();
