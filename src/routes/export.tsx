@@ -50,8 +50,123 @@ const FRAMES: Array<{ label: string; value: BookFrameStyle }> = [
 ];
 
 const A4_W = 794; // px @96dpi
+const A4_H = 1123; // px @96dpi
 const MM = 3.7795; // px per mm
 const PAGE_PX_TO_PT = 0.75;
+
+function pageFits(page: HTMLElement) {
+  const body = page.querySelector<HTMLElement>("[data-book-body]");
+  const footer = page.querySelector<HTMLElement>("[data-book-footer]");
+  const bodyFits = !body || body.scrollHeight <= body.clientHeight + 1;
+  const footerFits = !footer || footer.scrollHeight <= footer.clientHeight + 1;
+  return bodyFits && footerFits && page.scrollHeight <= page.clientHeight + 1;
+}
+
+function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
+  const sourceHeader = template.querySelector<HTMLElement>("[data-book-header]");
+  const sourceParagraphs = Array.from(template.querySelectorAll<HTMLElement>("[data-book-paragraph]"));
+  const sourceFootnotes = template.querySelector<HTMLElement>("[data-book-footnotes]");
+  const pages: HTMLElement[] = [];
+
+  const createPage = () => {
+    const page = template.cloneNode(true) as HTMLElement;
+    page.removeAttribute("id");
+    page.classList.add("pdf-export-page");
+    page.style.width = "210mm";
+    page.style.height = "297mm";
+    page.style.minHeight = "297mm";
+    page.style.overflow = "hidden";
+    page.style.breakAfter = "page";
+    page.style.pageBreakAfter = "always";
+    page.querySelector<HTMLElement>("[data-book-body]")?.replaceChildren();
+    page.querySelector<HTMLElement>("[data-book-footnotes]")?.remove();
+    const number = page.querySelector<HTMLElement>("[data-book-page-number]");
+    if (number) number.textContent = `﴿ ${(pages.length + 1).toLocaleString("ar-EG")} ﴾`;
+    holder.appendChild(page);
+    pages.push(page);
+    return page;
+  };
+
+  let page = createPage();
+  const initialBody = page.querySelector<HTMLElement>("[data-book-body]");
+  if (!initialBody) return pages;
+  let body: HTMLElement = initialBody;
+  if (sourceHeader) body.appendChild(sourceHeader.cloneNode(true));
+
+  const moveToNewPage = () => {
+    page = createPage();
+    const nextBody = page.querySelector<HTMLElement>("[data-book-body]");
+    if (!nextBody) throw new Error("تعذّر إنشاء صفحة PDF");
+    body = nextBody;
+  };
+
+  sourceParagraphs.forEach((sourceParagraph) => {
+    let remaining = sourceParagraph.textContent?.trim().split(/\s+/).filter(Boolean) ?? [];
+    let continuation = false;
+
+    while (remaining.length > 0) {
+      const full = sourceParagraph.cloneNode(true) as HTMLElement;
+      full.textContent = remaining.join(" ");
+      if (continuation) full.style.textIndent = "0";
+      body.appendChild(full);
+      if (pageFits(page)) break;
+      full.remove();
+
+      let low = 1;
+      let high = remaining.length;
+      let best = 0;
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const candidate = sourceParagraph.cloneNode(true) as HTMLElement;
+        candidate.textContent = remaining.slice(0, middle).join(" ");
+        candidate.style.marginBottom = "0";
+        if (continuation) candidate.style.textIndent = "0";
+        body.appendChild(candidate);
+        const fits = pageFits(page);
+        candidate.remove();
+        if (fits) {
+          best = middle;
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+
+      if (best > 0) {
+        const fragment = sourceParagraph.cloneNode(true) as HTMLElement;
+        fragment.textContent = remaining.slice(0, best).join(" ");
+        fragment.style.marginBottom = "0";
+        if (continuation) fragment.style.textIndent = "0";
+        body.appendChild(fragment);
+        remaining = remaining.slice(best);
+        continuation = true;
+      }
+      moveToNewPage();
+      if (best === 0 && remaining.length === 1) {
+        const finalWord = sourceParagraph.cloneNode(true) as HTMLElement;
+        finalWord.textContent = remaining[0] ?? "";
+        finalWord.style.textIndent = "0";
+        body.appendChild(finalWord);
+        remaining = [];
+      }
+    }
+  });
+
+  if (sourceFootnotes) {
+    let footer = page.querySelector<HTMLElement>("[data-book-footer]");
+    footer?.prepend(sourceFootnotes.cloneNode(true));
+    if (!pageFits(page)) {
+      footer?.querySelector<HTMLElement>("[data-book-footnotes]")?.remove();
+      moveToNewPage();
+      footer = page.querySelector<HTMLElement>("[data-book-footer]");
+      footer?.prepend(sourceFootnotes.cloneNode(true));
+    }
+  }
+
+  pages.at(-1)?.style.setProperty("break-after", "auto");
+  pages.at(-1)?.style.setProperty("page-break-after", "auto");
+  return pages;
+}
 
 // html2canvas can't parse oklch(): temporarily replace theme variables with rgb equivalents
 function flattenOklchVars() {
@@ -111,33 +226,34 @@ function ExportPage() {
   const exportPdf = async () => {
     if (!pageRef.current) return;
     setBusy("pdf");
+    let holder: HTMLDivElement | null = null;
+    let restoreVars = () => {};
     try {
       const html2pdf = (await import("html2pdf.js")).default;
       await document.fonts.ready;
-      const clone = pageRef.current.cloneNode(true) as HTMLElement;
-      clone.style.width = `${A4_W}px`;
-      clone.style.minHeight = "1123px";
-      clone.style.height = "auto";
-      // html2canvas can't parse oklch theme colors — use plain print colors
-      [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))].forEach((el) => {
-        const muted = el.classList.contains("text-muted-foreground");
-        const rule = el.classList.contains("bg-border");
-        el.removeAttribute("class");
-        el.style.color = muted ? "#8a8070" : "#1f1b24";
-        el.style.backgroundColor = rule ? "#e6dccf" : "transparent";
-        el.style.boxShadow = "none";
-        el.style.borderColor = "transparent";
-        el.style.outlineColor = "transparent";
-        el.style.textDecorationColor = "currentColor";
-        el.style.caretColor = "auto";
-        el.style.columnRuleColor = "transparent";
-      });
-      clone.style.backgroundColor = "#ffffff";
-      const holder = document.createElement("div");
-      holder.style.cssText = `position:fixed;top:0;inset-inline-start:-10000px;width:${A4_W}px;`;
-      holder.appendChild(clone);
+      holder = document.createElement("div");
+      holder.style.cssText = "position:fixed;top:0;left:0;z-index:2147483647;width:210mm;background:#fff;pointer-events:none;";
       document.body.appendChild(holder);
-      const restoreVars = flattenOklchVars();
+      const pages = buildPdfPages(pageRef.current, holder);
+      if (pages.length === 0) throw new Error("تعذّر تقسيم المستند إلى صفحات");
+      // html2canvas can't parse oklch theme colors — use plain print colors
+      pages.forEach((pdfPage) => {
+        [pdfPage, ...Array.from(pdfPage.querySelectorAll<HTMLElement>("*"))].forEach((el) => {
+          const muted = el.classList.contains("text-muted-foreground");
+          const rule = el.classList.contains("bg-border");
+          el.removeAttribute("class");
+          el.style.color = muted ? "#8a8070" : "#1f1b24";
+          el.style.backgroundColor = rule ? "#e6dccf" : "transparent";
+          el.style.boxShadow = "none";
+          el.style.borderColor = "transparent";
+          el.style.outlineColor = "transparent";
+          el.style.textDecorationColor = "currentColor";
+          el.style.caretColor = "auto";
+          el.style.columnRuleColor = "transparent";
+        });
+        pdfPage.style.backgroundColor = "#ffffff";
+      });
+      restoreVars = flattenOklchVars();
       await html2pdf()
         .set({
           margin: 0,
@@ -146,11 +262,11 @@ function ExportPage() {
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
-        .from(clone)
+        .from(holder)
         .save();
-      holder.remove();
-      restoreVars();
     } finally {
+      holder?.remove();
+      restoreVars();
       setBusy(null);
     }
   };
@@ -297,7 +413,7 @@ function ExportPage() {
         <section className="print-preview min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
           <p className="mb-4 text-center text-xs font-bold text-muted-foreground">معاينة الطباعة · A4</p>
           <div ref={wrapRef} className="mx-auto w-full max-w-[794px]">
-            <div style={{ height: 1123 * scale, overflow: "hidden" }}>
+            <div style={{ height: A4_H * scale, overflow: "hidden" }}>
               <div style={{ width: A4_W, transform: `scale(${scale})`, transformOrigin: "top right" }}>
                 <div
                   ref={pageRef}
@@ -308,7 +424,7 @@ function ExportPage() {
                     display: "flex",
                     flexDirection: "column",
                     width: A4_W,
-                    minHeight: 1123,
+                    minHeight: A4_H,
                     padding,
                     fontFamily: `'${font}', 'Amiri', serif`,
                     fontSize: pxSize,
@@ -316,20 +432,24 @@ function ExportPage() {
                     boxSizing: "border-box",
                   }}
                 >
-                  <BookFrame width={A4_W} height={1123} variant={frameStyle} />
-                  <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
-                    {BOOK.title}
-                  </h1>
-                  <div style={{ marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>
-                  <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.2 }}>
-                    {BOOK.chapter}
-                  </h2>
-                  {BOOK.paragraphs.map((p, i) => (
-                    <p key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
-                  ))}
-                  <div style={{ marginTop: "auto" }}>
+                  <BookFrame width={A4_W} height={A4_H} variant={frameStyle} />
+                  <div data-book-body>
+                    <div data-book-header>
+                      <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
+                        {BOOK.title}
+                      </h1>
+                      <div style={{ marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>
+                      <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.2 }}>
+                        {BOOK.chapter}
+                      </h2>
+                    </div>
+                    {BOOK.paragraphs.map((p, i) => (
+                      <p data-book-paragraph key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
+                    ))}
+                  </div>
+                  <div data-book-footer style={{ marginTop: "auto" }}>
                     {BOOK.footnotes.length > 0 && (
-                      <div style={{ paddingTop: pxSize * 1.2 }}>
+                      <div data-book-footnotes style={{ paddingTop: pxSize * 1.2 }}>
                         <FootnoteRule />
                         <div style={{ marginTop: pxSize * 0.4, fontSize: pxSize * 0.78, lineHeight: 1.7 }}>
                           {BOOK.footnotes.map((f, i) => (
@@ -338,7 +458,7 @@ function ExportPage() {
                         </div>
                       </div>
                     )}
-                    <p className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
+                    <p data-book-page-number className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
                   </div>
                 </div>
               </div>
