@@ -413,53 +413,52 @@ function ExportPage() {
         <section className="print-preview min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
           <p className="mb-4 text-center text-xs font-bold text-muted-foreground">معاينة الطباعة · A4</p>
           <div ref={wrapRef} className="mx-auto w-full max-w-[794px]">
-            <div style={{ height: A4_H * scale, overflow: "hidden" }}>
-              <div style={{ width: A4_W, transform: `scale(${scale})`, transformOrigin: "top right" }}>
-                <div
-                  ref={pageRef}
-                  dir="rtl"
-                   className="a4-print-page bg-card text-card-foreground shadow-card"
-                  style={{
-                    position: "relative",
-                    display: "flex",
-                    flexDirection: "column",
-                    width: A4_W,
-                    minHeight: A4_H,
-                    padding,
-                    fontFamily: `'${font}', 'Amiri', serif`,
-                    fontSize: pxSize,
-                    lineHeight,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <BookFrame width={A4_W} height={A4_H} variant={frameStyle} />
-                  <div data-book-body>
-                    <div data-book-header>
-                      <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
-                        {BOOK.title}
-                      </h1>
-                      <div style={{ marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>
-                      <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.2 }}>
-                        {BOOK.chapter}
-                      </h2>
-                    </div>
-                    {BOOK.paragraphs.map((p, i) => (
-                      <p data-book-paragraph key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
-                    ))}
+            <div style={{ width: A4_W, zoom: scale }}>
+              <div
+                ref={pageRef}
+                dir="rtl"
+                className="a4-print-page bg-card text-card-foreground shadow-card"
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  flexDirection: "column",
+                  width: A4_W,
+                  minHeight: A4_H,
+                  overflow: "visible",
+                  padding,
+                  fontFamily: `'${font}', 'Amiri', serif`,
+                  fontSize: pxSize,
+                  lineHeight,
+                  boxSizing: "border-box",
+                }}
+              >
+                <BookFrame width={A4_W} height={A4_H} variant={frameStyle} />
+                <div data-book-body>
+                  <div data-book-header>
+                    <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
+                      {BOOK.title}
+                    </h1>
+                    <div style={{ marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>
+                    <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.2 }}>
+                      {BOOK.chapter}
+                    </h2>
                   </div>
-                  <div data-book-footer style={{ marginTop: "auto" }}>
-                    {BOOK.footnotes.length > 0 && (
-                      <div data-book-footnotes style={{ paddingTop: pxSize * 1.2 }}>
-                        <FootnoteRule />
-                        <div style={{ marginTop: pxSize * 0.4, fontSize: pxSize * 0.78, lineHeight: 1.7 }}>
-                          {BOOK.footnotes.map((f, i) => (
-                            <p key={i} style={{ textAlign: "justify", marginBottom: 2 }}>{f}</p>
-                          ))}
-                        </div>
+                  {BOOK.paragraphs.map((p, i) => (
+                    <p data-book-paragraph key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
+                  ))}
+                </div>
+                <div data-book-footer style={{ marginTop: "auto" }}>
+                  {BOOK.footnotes.length > 0 && (
+                    <div data-book-footnotes style={{ paddingTop: pxSize * 1.2 }}>
+                      <FootnoteRule />
+                      <div style={{ marginTop: pxSize * 0.4, fontSize: pxSize * 0.78, lineHeight: 1.7 }}>
+                        {BOOK.footnotes.map((f, i) => (
+                          <p key={i} style={{ textAlign: "justify", marginBottom: 2 }}>{f}</p>
+                        ))}
                       </div>
-                    )}
-                    <p data-book-page-number className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
-                  </div>
+                    </div>
+                  )}
+                  <p data-book-page-number className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
                 </div>
               </div>
             </div>
