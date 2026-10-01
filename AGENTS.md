@@ -9,4 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Keep export preview and browser print output at A4 with zero browser margins; use minimum page height so long text flows without vertical compression.
+- Export preview, print and PDF are split into distinct fixed A4 sheets (zero browser margins) generated from one hidden template; long text paginates across sheets instead of stretching or compressing one page.

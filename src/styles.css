@@ -189,34 +189,44 @@
   }
 
   .print-preview > div,
-  .print-preview > div > div,
-  .print-preview > div > div > div {
+  .a4-preview-scale,
+  .a4-sheets {
     width: 210mm !important;
     height: auto !important;
-    min-height: 297mm !important;
     max-width: none !important;
     overflow: visible !important;
     transform: none !important;
-  }
-
-  .a4-print-page {
-    position: relative !important;
-    display: block !important;
-    width: 210mm !important;
-    min-height: 297mm !important;
-    height: auto !important;
-    margin: 0 !important;
-    overflow: visible !important;
-    box-shadow: none !important;
-    break-after: page;
-    page-break-after: always;
+    gap: 0 !important;
   }
 
   .a4-preview-scale {
     zoom: 1 !important;
   }
 
-  .a4-print-page .book-ornate-frame {
+  .a4-template-wrap {
+    display: none !important;
+  }
+
+  /* Each sheet is exactly one printed A4 page */
+  .a4-sheet {
+    position: relative !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+  }
+
+  .a4-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .a4-sheet .book-ornate-frame {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;

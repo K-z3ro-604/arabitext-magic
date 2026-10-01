@@ -201,8 +201,10 @@ function ExportPage() {
   const [text, setText] = useState(SAMPLE_TEXT);
   const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
   const [scale, setScale] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
   const wrapRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const sheetsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = loadDocument();
@@ -222,6 +224,29 @@ function ExportPage() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Paginate the hidden template into distinct fixed A4 sheets for the preview & print
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      await document.fonts.ready;
+      const template = pageRef.current;
+      const holder = sheetsRef.current;
+      if (cancelled || !template || !holder) return;
+      holder.replaceChildren();
+      const sheets = buildPdfPages(template, holder);
+      sheets.forEach((sheet) => {
+        sheet.classList.remove("pdf-export-page");
+        sheet.classList.add("a4-sheet", "shadow-card");
+        sheet.removeAttribute("aria-hidden");
+      });
+      setPageCount(Math.max(1, sheets.length));
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [BOOK, font, size, lineHeight, padding, frameStyle]);
 
   const exportPdf = async () => {
     if (!pageRef.current) return;
@@ -411,20 +436,25 @@ function ExportPage() {
         </aside>
 
         <section className="print-preview min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
-          <p className="mb-4 text-center text-xs font-bold text-muted-foreground">معاينة الطباعة · A4</p>
+          <p className="mb-4 text-center text-xs font-bold text-muted-foreground">
+            معاينة الطباعة · A4 · {pageCount.toLocaleString("ar-EG")} {pageCount === 1 ? "صفحة" : "صفحات"}
+          </p>
           <div ref={wrapRef} className="mx-auto w-full max-w-[794px]">
             <div className="a4-preview-scale" style={{ width: A4_W, zoom: scale }}>
+              {/* Distinct paginated A4 sheets, generated from the hidden template below */}
+              <div ref={sheetsRef} className="a4-sheets" style={{ display: "flex", flexDirection: "column", gap: 24 }} />
+              <div className="a4-template-wrap" aria-hidden style={{ position: "absolute", left: -99999, top: 0, visibility: "hidden", pointerEvents: "none" }}>
               <div
                 ref={pageRef}
                 dir="rtl"
-                className="a4-print-page bg-card text-card-foreground shadow-card"
+                className="bg-card text-card-foreground"
                 style={{
                   position: "relative",
                   display: "flex",
                   flexDirection: "column",
                   width: A4_W,
                   minHeight: A4_H,
-                  overflow: "visible",
+                  overflow: "hidden",
                   padding,
                   fontFamily: `'${font}', 'Amiri', serif`,
                   fontSize: pxSize,
@@ -460,6 +490,7 @@ function ExportPage() {
                   )}
                   <p data-book-page-number className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
                 </div>
+              </div>
               </div>
             </div>
           </div>
