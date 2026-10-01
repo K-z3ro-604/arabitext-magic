@@ -413,7 +413,7 @@ function ExportPage() {
         <section className="print-preview min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
           <p className="mb-4 text-center text-xs font-bold text-muted-foreground">معاينة الطباعة · A4</p>
           <div ref={wrapRef} className="mx-auto w-full max-w-[794px]">
-            <div style={{ width: A4_W, zoom: scale }}>
+            <div className="a4-preview-scale" style={{ width: A4_W, zoom: scale }}>
               <div
                 ref={pageRef}
                 dir="rtl"

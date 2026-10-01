@@ -201,13 +201,19 @@
 
   .a4-print-page {
     position: relative !important;
+    display: block !important;
     width: 210mm !important;
     min-height: 297mm !important;
     height: auto !important;
     margin: 0 !important;
+    overflow: visible !important;
     box-shadow: none !important;
     break-after: page;
     page-break-after: always;
+  }
+
+  .a4-preview-scale {
+    zoom: 1 !important;
   }
 
   .a4-print-page .book-ornate-frame {
