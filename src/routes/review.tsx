@@ -94,17 +94,20 @@ function ReviewPage() {
   const changeCount = tokens.filter((t) => t.type === "add").length;
 
   const run = async (mode: Mode) => {
-    if (!input.trim() || loading) return;
+    // Cumulative: each tool builds on the latest processed text, not the raw input.
+    const base = result && !accepted ? result.corrected : input;
+    const original = result && !accepted ? result.original : input;
+    if (!base.trim() || loading) return;
     setAccepted(false);
     setError("");
     if (mode === "strip") {
-      setResult({ original: input, corrected: stripDiacritics(input), mode });
+      setResult({ original, corrected: stripDiacritics(base), mode });
       return;
     }
     setLoading(mode);
     try {
-      const r = await processText({ data: { text: input, mode } });
-      setResult({ original: input, corrected: r.text, mode });
+      const r = await processText({ data: { text: base, mode } });
+      setResult({ original, corrected: r.text, mode });
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّرت المعالجة");
     } finally {
