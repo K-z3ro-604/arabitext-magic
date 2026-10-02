@@ -257,7 +257,7 @@ function ExportPage() {
       const html2pdf = (await import("html2pdf.js")).default;
       await document.fonts.ready;
       holder = document.createElement("div");
-      holder.style.cssText = "position:fixed;top:0;left:0;z-index:2147483647;width:210mm;background:#fff;pointer-events:none;";
+      holder.style.cssText = "position:absolute;top:0;left:0;z-index:2147483647;width:210mm;min-width:210mm;max-width:210mm;overflow:visible;background:#fff;pointer-events:none;";
       document.body.appendChild(holder);
       const pages = buildPdfPages(pageRef.current, holder);
       if (pages.length === 0) throw new Error("تعذّر تقسيم المستند إلى صفحات");
@@ -284,7 +284,15 @@ function ExportPage() {
           margin: 0,
           filename: slugName("pdf"),
           image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            width: A4_W,
+            windowWidth: A4_W,
+            scrollX: 0,
+            scrollY: 0,
+            backgroundColor: "#ffffff",
+          },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         })
         .from(holder)
