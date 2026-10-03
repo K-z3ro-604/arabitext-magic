@@ -9,4 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Export preview, print and PDF are split into distinct fixed A4 sheets (zero browser margins) generated from one hidden template; long text paginates across sheets instead of stretching or compressing one page.
+- Export preview and native browser PDF printing use the same distinct fixed A4 sheets (zero browser margins) generated from one hidden template; wait for document fonts before printing so long text paginates accurately without canvas capture.
