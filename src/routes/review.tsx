@@ -36,7 +36,7 @@ type Token = { type: "same" | "del" | "add"; text: string };
 
 // Split into words + separators, keeping punctuation attached to boundaries
 function tokenize(s: string) {
-  return s.split(/(\s+|[،.؛:!؟,?])/).filter((t) => t !== "");
+  return s.split(/(\s+|[،.؛:!؟,?﴿﴾«»"])/).filter((t) => t !== "");
 }
 
 // Word-level LCS diff
