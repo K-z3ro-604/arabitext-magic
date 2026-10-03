@@ -168,28 +168,6 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
   return pages;
 }
 
-// html2canvas can't parse oklch(): temporarily replace theme variables with rgb equivalents
-function flattenOklchVars() {
-  const root = document.documentElement;
-  const cs = getComputedStyle(root);
-  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
-  const changed: string[] = [];
-  if (!ctx) return () => {};
-  for (let i = 0; i < cs.length; i++) {
-    const name = cs[i]!;
-    if (!name.startsWith("--")) continue;
-    const val = cs.getPropertyValue(name).trim();
-    if (!/^oklch\(/.test(val)) continue;
-    ctx.clearRect(0, 0, 1, 1);
-    ctx.fillStyle = val;
-    ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-    root.style.setProperty(name, `rgba(${r}, ${g}, ${b}, ${(a ?? 255) / 255})`);
-    changed.push(name);
-  }
-  return () => changed.forEach((n) => root.style.removeProperty(n));
-}
-
 function ExportPage() {
   const [font, setFont] = useState("Amiri");
   const [size, setSize] = useState(16); // pt
@@ -249,58 +227,47 @@ function ExportPage() {
   }, [BOOK, font, size, lineHeight, padding, frameStyle]);
 
   const exportPdf = async () => {
-    if (!pageRef.current) return;
+    const template = pageRef.current;
+    const holder = sheetsRef.current;
+    if (!template || !holder) return;
     setBusy("pdf");
-    let holder: HTMLDivElement | null = null;
-    let restoreVars = () => {};
     try {
-      const html2pdf = (await import("html2pdf.js")).default;
+      await Promise.all([
+        document.fonts.load(`400 ${pxSize}px "${font}"`),
+        document.fonts.load(`700 ${pxSize}px "${font}"`),
+      ]);
       await document.fonts.ready;
-      holder = document.createElement("div");
-      holder.style.cssText = "position:absolute;top:0;left:0;z-index:2147483647;width:210mm;min-width:210mm;max-width:210mm;overflow:visible;background:#fff;pointer-events:none;";
-      document.body.appendChild(holder);
-      const pages = buildPdfPages(pageRef.current, holder);
+
+      // Rebuild after font metrics settle so native printing receives complete,
+      // correctly paginated A4 sheets instead of a mobile-sized canvas capture.
+      holder.replaceChildren();
+      const pages = buildPdfPages(template, holder);
       if (pages.length === 0) throw new Error("تعذّر تقسيم المستند إلى صفحات");
-      // html2canvas can't parse oklch theme colors — use plain print colors
-      pages.forEach((pdfPage) => {
-        [pdfPage, ...Array.from(pdfPage.querySelectorAll<HTMLElement>("*"))].forEach((el) => {
-          const muted = el.classList.contains("text-muted-foreground");
-          const rule = el.classList.contains("bg-border");
-          el.removeAttribute("class");
-          el.style.color = muted ? "#8a8070" : "#1f1b24";
-          el.style.backgroundColor = rule ? "#e6dccf" : "transparent";
-          el.style.boxShadow = "none";
-          el.style.borderColor = "transparent";
-          el.style.outlineColor = "transparent";
-          el.style.textDecorationColor = "currentColor";
-          el.style.caretColor = "auto";
-          el.style.columnRuleColor = "transparent";
-        });
-        pdfPage.style.backgroundColor = "#ffffff";
+      pages.forEach((sheet) => {
+        sheet.classList.remove("pdf-export-page");
+        sheet.classList.add("a4-sheet", "shadow-card");
+        sheet.removeAttribute("aria-hidden");
       });
-      restoreVars = flattenOklchVars();
-      await html2pdf()
-        .set({
-          margin: 0,
-          filename: slugName("pdf"),
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            width: A4_W,
-            windowWidth: A4_W,
-            scrollX: 0,
-            scrollY: 0,
-            backgroundColor: "#ffffff",
-          },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        })
-        .from(holder)
-        .save();
+      setPageCount(pages.length);
+
+      await Promise.all(
+        Array.from(holder.querySelectorAll("img")).map((image) =>
+          image.complete ? Promise.resolve() : image.decode().catch(() => undefined),
+        ),
+      );
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+      document.documentElement.classList.add("native-pdf-print");
+      const finishPrint = () => {
+        document.documentElement.classList.remove("native-pdf-print");
+        setBusy(null);
+      };
+      window.addEventListener("afterprint", finishPrint, { once: true });
+      window.print();
+      window.setTimeout(finishPrint, 60_000);
+      return;
     } finally {
-      holder?.remove();
-      restoreVars();
-      setBusy(null);
+      if (!document.documentElement.classList.contains("native-pdf-print")) setBusy(null);
     }
   };
 
@@ -438,7 +405,7 @@ function ExportPage() {
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand px-5 py-3.5 font-display text-sm font-extrabold text-primary-foreground shadow-brand transition hover:-translate-y-0.5 disabled:opacity-60"
             >
               {busy === "pdf" ? <Loader2 className="size-5 animate-spin" /> : <FileDown className="size-5" />}
-              تصدير كملف PDF
+              طباعة / حفظ PDF
             </button>
           </div>
         </aside>
