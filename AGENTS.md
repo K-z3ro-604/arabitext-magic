@@ -9,4 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-- Export preview and native browser PDF printing use the same distinct fixed A4 sheets (zero browser margins) generated from one hidden template; wait for document fonts before printing so long text paginates accurately without canvas capture.
+- Export preview and native browser PDF printing use the same distinct fixed A4 sheets generated from one hidden template; top-only student ornaments repeat per page while sides and bottoms remain clear, and fonts must load before pagination and printing.
