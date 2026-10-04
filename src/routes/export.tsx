@@ -312,8 +312,8 @@ function ExportPage() {
                 margin: { top: pageMargin, bottom: pageMargin, left: pageMargin, right: pageMargin },
                 ...(topOnly ? {} : { borders: { pageBorderTop: border, pageBorderBottom: border, pageBorderLeft: border, pageBorderRight: border } }),
               },
-            ...(topHeader ? { headers: { default: topHeader } } : {}),
             },
+            ...(topHeader ? { headers: { default: topHeader } } : {}),
             children: [
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [run(BOOK.title, size + 10, true)] }),
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: "❁", color: "8A6A2F", size: 24 })] }),
