@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, FileDown, Loader2, Type, Baseline, Maximize, AlignJustify, Frame, BookOpen } from "lucide-react";
-import { BookFrame, FootnoteRule, HeadingOrnament, type BookFrameStyle } from "@/components/book-ornament";
+import { BookFrame, FootnoteRule, HeadingOrnament, TOP_ONLY_FRAME_STYLES, type BookFrameStyle } from "@/components/book-ornament";
 import { loadDocument } from "@/lib/document";
 
 export const Route = createFileRoute("/export")({
@@ -47,6 +47,9 @@ const FRAMES: Array<{ label: string; value: BookFrameStyle }> = [
   { label: "إسلامي كلاسيكي", value: "classic" },
   { label: "زهري ملكي", value: "royal" },
   { label: "علمي مبسّط", value: "scientific" },
+  { label: "ملاحظات دراسية مسطّرة", value: "study" },
+  { label: "رأس محاضرة منظّم", value: "lecture" },
+  { label: "تعليقات هامشية هادئة", value: "annotation" },
 ];
 
 const A4_W = 794; // px @96dpi
@@ -274,12 +277,31 @@ function ExportPage() {
   const exportDocx = async () => {
     setBusy("docx");
     try {
-      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } = await import("docx");
+      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, Header } = await import("docx");
       const twip = (mm: number) => Math.round(mm * 56.7);
       const line = Math.round(240 * lineHeight);
       const run = (text: string, pt: number, bold = false) =>
         new TextRun({ text, font, size: pt * 2, bold, rightToLeft: true });
       const border = { style: BorderStyle.DOUBLE, size: 12, color: "8A6A2F", space: 24 };
+      const topOnly = TOP_ONLY_FRAME_STYLES.has(frameStyle);
+      const headerMarks: Record<"study" | "lecture" | "annotation", string> = {
+        study: "◆  ─────────────  ◆",
+        lecture: "◇  ━━━━━━━━━━━━━  ◇",
+        annotation: "•   •   •",
+      };
+      const topHeader = topOnly
+        ? new Header({
+            children: [
+              new Paragraph({
+                bidirectional: true,
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 80 },
+                border: { bottom: { style: frameStyle === "study" ? BorderStyle.DOUBLE : BorderStyle.SINGLE, size: frameStyle === "lecture" ? 12 : 6, color: "8A6A2F", space: 5 } },
+                children: [new TextRun({ text: headerMarks[frameStyle as "study" | "lecture" | "annotation"], color: "8A6A2F", size: 18 })],
+              }),
+            ],
+          })
+        : undefined;
       const pageMargin = twip(Math.max(margin, 22));
       const doc = new Document({
         sections: [
@@ -288,8 +310,9 @@ function ExportPage() {
               page: {
                 size: { width: 11906, height: 16838 },
                 margin: { top: pageMargin, bottom: pageMargin, left: pageMargin, right: pageMargin },
-                borders: { pageBorderTop: border, pageBorderBottom: border, pageBorderLeft: border, pageBorderRight: border },
+                ...(topOnly ? {} : { borders: { pageBorderTop: border, pageBorderBottom: border, pageBorderLeft: border, pageBorderRight: border } }),
               },
+            ...(topHeader ? { headers: { default: topHeader } } : {}),
             },
             children: [
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [run(BOOK.title, size + 10, true)] }),
@@ -376,7 +399,7 @@ function ExportPage() {
               ))}
             </select>
           </Control>
-          <Control icon={<Frame className="size-4 text-brand" />} label="نمط إطار الصفحة">
+          <Control icon={<Frame className="size-4 text-brand" />} label="نمط الصفحة">
             <select
               value={frameStyle}
               onChange={(e) => setFrameStyle(e.target.value as BookFrameStyle)}
@@ -384,6 +407,11 @@ function ExportPage() {
             >
               {FRAMES.map((frame) => <option key={frame.value} value={frame.value}>{frame.label}</option>)}
             </select>
+            {TOP_ONLY_FRAME_STYLES.has(frameStyle) && (
+              <span className="text-[11px] leading-relaxed text-muted-foreground">
+                زخرفة علوية فقط، مع جوانب وأسفل خالية للكتابة والتعليقات.
+              </span>
+            )}
           </Control>
           <Slider icon={<Baseline className="size-4 text-brand" />} label="حجم الخط" value={size} min={11} max={24} step={1} unit="نقطة" onChange={setSize} />
           <Slider icon={<Maximize className="size-4 text-brand" />} label="هوامش الصفحة" value={margin} min={10} max={40} step={1} unit="مم" onChange={setMargin} />

@@ -3,7 +3,20 @@
 const INK = "#8a6a2f";
 const INK_SOFT = "#b89656";
 
-export type BookFrameStyle = "simple" | "classic" | "royal" | "scientific";
+export type BookFrameStyle =
+  | "simple"
+  | "classic"
+  | "royal"
+  | "scientific"
+  | "study"
+  | "lecture"
+  | "annotation";
+
+export const TOP_ONLY_FRAME_STYLES: ReadonlySet<BookFrameStyle> = new Set([
+  "study",
+  "lecture",
+  "annotation",
+]);
 
 function Star({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   return (
@@ -63,6 +76,9 @@ export function BookFrame({ width, height, variant = "classic" }: { width: numbe
         <pattern id={`bk-dots-${variant}`} width="10" height="10" patternUnits="userSpaceOnUse">
           <circle cx="5" cy="5" r="1" fill={INK_SOFT} />
         </pattern>
+        <pattern id={`bk-study-${variant}`} width="20" height="12" patternUnits="userSpaceOnUse">
+          <path d="M0 6 H20 M10 2 V10" fill="none" stroke={INK_SOFT} strokeWidth="0.65" />
+        </pattern>
       </defs>
       {variant === "simple" && (
         <g>
@@ -106,6 +122,36 @@ export function BookFrame({ width, height, variant = "classic" }: { width: numbe
           <circle cx={width / 2} cy={i} r="3.5" fill={INK} />
           <circle cx={width / 2} cy={height - i} r="3.5" fill={INK} />
           <path d={`M${width / 2 - 50} ${i} H${width / 2 - 10} M${width / 2 + 10} ${i} H${width / 2 + 50} M${width / 2 - 50} ${height - i} H${width / 2 - 10} M${width / 2 + 10} ${height - i} H${width / 2 + 50}`} stroke={INK_SOFT} strokeWidth="1" />
+        </g>
+      )}
+      {variant === "study" && (
+        <g>
+          <rect x={o} y={o} width={width - o * 2} height="28" fill={`url(#bk-study-${variant})`} opacity="0.72" />
+          <path d={`M${o} 50 H${width - o}`} fill="none" stroke={INK} strokeWidth="1.6" />
+          <path d={`M${o + 34} 56 H${width / 2 - 16} M${width / 2 + 16} 56 H${width - o - 34}`} fill="none" stroke={INK_SOFT} strokeWidth="0.7" />
+          <path d={`M${width / 2} 48 l8 8 -8 8 -8 -8 Z`} fill="#fffdf7" stroke={INK} strokeWidth="1.2" />
+          <circle cx={width / 2} cy="56" r="2" fill={INK} />
+        </g>
+      )}
+      {variant === "lecture" && (
+        <g>
+          <path d={`M${o} 22 H${width - o} V62 H${o} Z`} fill="none" stroke={INK} strokeWidth="1.4" />
+          <path d={`M${o + 8} 30 H${width - o - 8} V54 H${o + 8} Z`} fill="none" stroke={INK_SOFT} strokeWidth="0.65" />
+          {Array.from({ length: 9 }, (_, index) => {
+            const x = o + 24 + index * ((width - o * 2 - 48) / 8);
+            return <path key={x} d={`M${x} 22 L${x + 20} 42 L${x} 62`} fill="none" stroke={INK_SOFT} strokeWidth="0.7" />;
+          })}
+          <circle cx={width / 2} cy="42" r="8" fill="#fffdf7" stroke={INK} strokeWidth="1.2" />
+          <path d={`M${width / 2 - 4} 42 H${width / 2 + 4} M${width / 2} 38 V46`} stroke={INK} strokeWidth="1" />
+        </g>
+      )}
+      {variant === "annotation" && (
+        <g>
+          <path d={`M${o} 52 H${width - o}`} fill="none" stroke={INK} strokeWidth="1.1" />
+          <path d={`M${o} 42 H${o + 92} M${width - o - 92} 42 H${width - o}`} fill="none" stroke={INK_SOFT} strokeWidth="0.65" />
+          <circle cx={width / 2 - 18} cy="52" r="2.2" fill={INK_SOFT} />
+          <circle cx={width / 2} cy="52" r="3.6" fill="#fffdf7" stroke={INK} strokeWidth="1" />
+          <circle cx={width / 2 + 18} cy="52" r="2.2" fill={INK_SOFT} />
         </g>
       )}
     </svg>
