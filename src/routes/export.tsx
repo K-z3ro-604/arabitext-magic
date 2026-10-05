@@ -300,7 +300,7 @@ function ExportPage() {
   const exportDocx = async () => {
     setBusy("docx");
     try {
-      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, Header } = await import("docx");
+      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, Header, Table, TableRow, TableCell, WidthType } = await import("docx");
       const twip = (mm: number) => Math.round(mm * 56.7);
       const line = Math.round(240 * lineHeight);
       const run = (text: string, pt: number, bold = false) =>
@@ -312,9 +312,25 @@ function ExportPage() {
         lecture: "◇  ━━━━━━━━━━━━━  ◇",
         annotation: "•   •   •",
       };
+      const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+      const noBorders = { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none };
+      const headRun = (t: string) => new TextRun({ text: t, font, size: Math.max(9, size - 3) * 2, bold: true, color: "8A6A2F", rightToLeft: true });
+      const titleRow = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: noBorders,
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({ borders: noBorders, width: { size: 50, type: WidthType.PERCENTAGE }, children: [new Paragraph({ bidirectional: true, alignment: AlignmentType.LEFT, children: [headRun(BOOK.chapter)] })] }),
+              new TableCell({ borders: noBorders, width: { size: 50, type: WidthType.PERCENTAGE }, children: [new Paragraph({ bidirectional: true, alignment: AlignmentType.RIGHT, children: [headRun(BOOK.title)] })] }),
+            ],
+          }),
+        ],
+      });
       const topHeader = topOnly
         ? new Header({
             children: [
+              titleRow,
               new Paragraph({
                 bidirectional: true,
                 alignment: AlignmentType.CENTER,
@@ -515,6 +531,15 @@ function ExportPage() {
                 }}
               >
                 <BookFrame width={A4_W} height={A4_H} variant={frameStyle} />
+                {TOP_ONLY_FRAME_STYLES.has(frameStyle) && (
+                  <div
+                    data-book-running-header
+                    style={{ position: "relative", display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: pxSize, fontSize: pxSize * 0.8, fontWeight: 700, lineHeight: 1.4, marginBottom: pxSize * 0.8, color: "#8a6a2f" }}
+                  >
+                    <span style={{ textAlign: "right" }}>{BOOK.title}</span>
+                    <span style={{ textAlign: "left" }}>{BOOK.chapter}</span>
+                  </div>
+                )}
                 <div data-book-body>
                   <div data-book-header>
                     <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
