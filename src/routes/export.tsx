@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, FileDown, Loader2, Type, Baseline, Maximize, AlignJustify, Frame, BookOpen } from "lucide-react";
 import { BookFrame, FootnoteRule, HeadingOrnament, TOP_ONLY_FRAME_STYLES, type BookFrameStyle } from "@/components/book-ornament";
 import { loadDocument } from "@/lib/document";
+import { useServerFn } from "@tanstack/react-start";
+import { processArabicText } from "@/lib/ai.functions";
 
 export const Route = createFileRoute("/export")({
   head: () => ({
@@ -180,6 +182,11 @@ function ExportPage() {
   const [title, setTitle] = useState("رسالة في فن الكتابة");
   const [chapter, setChapter] = useState("الباب الأول: في فضل العلم");
   const [text, setText] = useState(SAMPLE_TEXT);
+  const [noteMode, setNoteMode] = useState<"manual" | "ai">("manual");
+  const [aiText, setAiText] = useState<{ source: string; result: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const processText = useServerFn(processArabicText);
   const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
   const [scale, setScale] = useState(1);
   const [pageCount, setPageCount] = useState(1);
@@ -192,7 +199,23 @@ function ExportPage() {
     if (saved.trim()) setText(saved);
   }, []);
 
-  const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(text) }), [title, chapter, text]);
+  const generateAiNotes = async () => {
+    if (!text.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError("");
+    try {
+      const r = await processText({ data: { text, mode: "footnotes" } });
+      setAiText({ source: text, result: r.text });
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "تعذّر التخريج الآلي");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const aiReady = noteMode === "ai" && aiText?.source === text;
+  const effectiveText = aiReady ? aiText!.result : text;
+  const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(effectiveText) }), [title, chapter, effectiveText]);
   const slugName = (ext: string) => `${(title || "كتاب").replace(/\s+/g, "-")}.${ext}`;
   const padding = Math.max(margin * MM, 72);
 
@@ -384,9 +407,35 @@ function ExportPage() {
           <Control icon={<AlignJustify className="size-4 text-brand" />} label="متن النص">
             <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6}
               className="w-full resize-y rounded-xl border border-line bg-surface px-3 py-2.5 text-sm leading-7 text-foreground outline-none focus:ring-2 focus:ring-ring" />
-            <span className="text-[11px] leading-relaxed text-muted-foreground">
-              للحواشي: ابدأ السطر برقم بين قوسين مثل [١] ليظهر أسفل الصفحة تحت الفاصل.
-            </span>
+          </Control>
+          <Control icon={<FileText className="size-4 text-brand" />} label="نظام الحواشي">
+            <div role="radiogroup" className="grid grid-cols-2 gap-2">
+              {([["manual", "حواشي يدوية"], ["ai", "تخريج وتوثيق آلي"]] as const).map(([v, l]) => (
+                <button key={v} role="radio" aria-checked={noteMode === v} onClick={() => setNoteMode(v)}
+                  className={`rounded-xl border px-2 py-2 text-xs font-bold transition ${noteMode === v ? "border-brand bg-brand text-primary-foreground" : "border-line bg-surface text-foreground hover:bg-muted"}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {noteMode === "manual" ? (
+              <span className="text-[11px] leading-relaxed text-muted-foreground">
+                ابدأ السطر برقم بين قوسين مثل [١] ليظهر أسفل الصفحة تحت الفاصل.
+              </span>
+            ) : (
+              <>
+                <button onClick={generateAiNotes} disabled={aiBusy || !text.trim()}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-3 py-2.5 text-xs font-extrabold text-accent-foreground disabled:opacity-50">
+                  {aiBusy ? <Loader2 className="size-4 animate-spin" /> : <BookOpen className="size-4" />}
+                  {aiReady ? "إعادة التخريج" : "خرّج الآيات والأحاديث والأقوال"}
+                </button>
+                <span className="text-[11px] leading-relaxed text-muted-foreground">
+                  {aiReady
+                    ? `تمت إضافة ${BOOK.footnotes.length.toLocaleString("ar-EG")} حاشية إلى المعاينة.`
+                    : aiText ? "تغيّر النص؛ أعد التخريج لتحديث الحواشي." : "يضيف الذكاء الاصطناعي أرقام الحواشي ومصادرها أسفل الصفحة."}
+                </span>
+                {aiError && <span className="text-[11px] font-bold text-destructive">{aiError}</span>}
+              </>
+            )}
           </Control>
           <Control icon={<Type className="size-4 text-brand" />} label="نوع الخط">
             <select
