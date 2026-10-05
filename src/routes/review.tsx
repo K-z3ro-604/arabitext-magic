@@ -62,12 +62,13 @@ function diff(a: string, b: string): Token[] {
   return out;
 }
 
-type Mode = "grammar" | "full" | "endings" | "strip";
+type Mode = "grammar" | "full" | "endings" | "ambiguous" | "strip";
 
 const LOADING_TEXT: Record<Mode, string> = {
   grammar: "جاري التدقيق…",
   full: "جاري التشكيل الكامل…",
   endings: "جاري تشكيل أواخر الكلمات…",
+  ambiguous: "جاري تشكيل الكلمات الملتبسة…",
   strip: "جاري إزالة التشكيل…",
 };
 
@@ -132,6 +133,7 @@ function ReviewPage() {
   const tools: { mode: Mode; label: string; icon: typeof Sparkles; cls: string }[] = [
     { mode: "full", label: "تشكيل كامل", icon: Sparkles, cls: "bg-gold text-accent-foreground shadow-gold" },
     { mode: "endings", label: "تشكيل أواخر الكلمات", icon: Baseline, cls: "bg-card text-foreground border border-line" },
+    { mode: "ambiguous", label: "تشكيل الكلمات التباساً فقط", icon: Sparkles, cls: "bg-card text-foreground border border-line" },
     { mode: "strip", label: "إزالة التشكيل", icon: Eraser, cls: "bg-card text-foreground border border-line" },
     { mode: "grammar", label: "تدقيق نحوي وإملائي", icon: SpellCheck2, cls: "bg-brand text-primary-foreground shadow-brand" },
   ];
