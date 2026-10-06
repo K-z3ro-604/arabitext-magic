@@ -27,6 +27,8 @@ const SAMPLE_TEXT = `إنَّ الكتابةَ الصحيحةَ مهمةٌ جد�
 [١] انظر: مقدمة ابن خلدون، فصل في صناعة الخط والكتابة.`;
 
 const FOOTNOTE_RE = /^\s*[[(]\s*[0-9٠-٩]+\s*[\])]\s*/;
+const FOOTNOTE_ID_RE = /^\s*[[(]\s*([0-9٠-٩]+)\s*[\])]\s*/;
+const CITATION_RE = /[[(]\s*([0-9٠-٩]+)\s*[\])]/g;
 
 type LayoutStyle = "standard" | "badr";
 type BookBlock = {
@@ -35,9 +37,31 @@ type BookBlock = {
   dividerBefore?: boolean;
 };
 
+type BookFootnote = { id: number; label: string; text: string };
+
+function normalizeArabicNumber(value: string) {
+  const western = value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  return Number.parseInt(western, 10);
+}
+
+function footnoteIdsIn(text: string) {
+  const ids = new Set<number>();
+  for (const match of text.matchAll(CITATION_RE)) {
+    const id = normalizeArabicNumber(match[1] ?? "");
+    if (Number.isFinite(id)) ids.add(id);
+  }
+  return ids;
+}
+
 function parseDocument(text: string, layoutStyle: LayoutStyle) {
   const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  const footnotes = lines.filter((line) => FOOTNOTE_RE.test(line));
+  const footnotes = lines.flatMap<BookFootnote>((line) => {
+    const match = line.match(FOOTNOTE_ID_RE);
+    if (!match) return [];
+    const id = normalizeArabicNumber(match[1] ?? "");
+    if (!Number.isFinite(id)) return [];
+    return [{ id, label: match[0].trim(), text: line.replace(FOOTNOTE_ID_RE, "").trim() }];
+  });
   const content = lines.filter((line) => !FOOTNOTE_RE.test(line)).join("\n");
   const blocks: BookBlock[] = [];
 
@@ -109,6 +133,9 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
   const sourceHeader = template.querySelector<HTMLElement>("[data-book-header]");
   const sourceParagraphs = Array.from(template.querySelectorAll<HTMLElement>("[data-book-paragraph]"));
   const sourceFootnotes = template.querySelector<HTMLElement>("[data-book-footnotes]");
+  const sourceNotes = sourceFootnotes
+    ? Array.from(sourceFootnotes.querySelectorAll<HTMLElement>("[data-book-footnote-id]"))
+    : [];
   const pages: HTMLElement[] = [];
 
   const createPage = () => {
@@ -128,6 +155,23 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
     holder.appendChild(page);
     pages.push(page);
     return page;
+  };
+
+  const syncPageFootnotes = (targetPage: HTMLElement) => {
+    const footer = targetPage.querySelector<HTMLElement>("[data-book-footer]");
+    footer?.querySelector<HTMLElement>("[data-book-footnotes]")?.remove();
+    if (!footer || !sourceFootnotes || sourceNotes.length === 0) return;
+
+    const bodyText = targetPage.querySelector<HTMLElement>("[data-book-body]")?.textContent ?? "";
+    const cited = footnoteIdsIn(bodyText);
+    if (cited.size === 0) return;
+
+    const notes = sourceFootnotes.cloneNode(true) as HTMLElement;
+    notes.querySelectorAll<HTMLElement>("[data-book-footnote-id]").forEach((note) => {
+      const id = Number(note.dataset["bookFootnoteId"]);
+      if (!cited.has(id)) note.remove();
+    });
+    if (notes.querySelector("[data-book-footnote-id]")) footer.prepend(notes);
   };
 
   let page = createPage();
@@ -162,8 +206,10 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
       full.textContent = remaining.join(" ");
       prepareContinuation(full);
       body.appendChild(full);
+      syncPageFootnotes(page);
       if (pageFits(page)) break;
       full.remove();
+      syncPageFootnotes(page);
 
       let low = 1;
       let high = remaining.length;
@@ -175,8 +221,10 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
         candidate.style.marginBottom = "0";
         prepareContinuation(candidate);
         body.appendChild(candidate);
+        syncPageFootnotes(page);
         const fits = pageFits(page);
         candidate.remove();
+        syncPageFootnotes(page);
         if (fits) {
           best = middle;
           low = middle + 1;
@@ -191,6 +239,7 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
         fragment.style.marginBottom = "0";
         prepareContinuation(fragment);
         body.appendChild(fragment);
+        syncPageFootnotes(page);
         remaining = remaining.slice(best);
         continuation = true;
       }
@@ -200,21 +249,11 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
         finalWord.textContent = remaining[0] ?? "";
         finalWord.style.textIndent = "0";
         body.appendChild(finalWord);
+        syncPageFootnotes(page);
         remaining = [];
       }
     }
   });
-
-  if (sourceFootnotes) {
-    let footer = page.querySelector<HTMLElement>("[data-book-footer]");
-    footer?.prepend(sourceFootnotes.cloneNode(true));
-    if (!pageFits(page)) {
-      footer?.querySelector<HTMLElement>("[data-book-footnotes]")?.remove();
-      moveToNewPage();
-      footer = page.querySelector<HTMLElement>("[data-book-footer]");
-      footer?.prepend(sourceFootnotes.cloneNode(true));
-    }
-  }
 
   pages.at(-1)?.style.setProperty("break-after", "auto");
   pages.at(-1)?.style.setProperty("page-break-after", "auto");
@@ -349,11 +388,19 @@ function ExportPage() {
   const exportDocx = async () => {
     setBusy("docx");
     try {
-      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, Header, Table, TableRow, TableCell, WidthType } = await import("docx");
+      const { Document, Packer, Paragraph, TextRun, FootnoteReferenceRun, AlignmentType, BorderStyle, Header, Table, TableRow, TableCell, WidthType } = await import("docx");
       const twip = (mm: number) => Math.round(mm * 56.7);
       const line = Math.round(240 * lineHeight);
       const run = (text: string, pt: number, bold = false) =>
         new TextRun({ text, font, size: pt * 2, bold, rightToLeft: true });
+      const footnoteById = new Map(BOOK.footnotes.map((note) => [note.id, note]));
+      const runsWithFootnotes = (value: string, pt: number, bold = false) =>
+        value.split(/([[(]\s*[0-9٠-٩]+\s*[\])])/g).filter(Boolean).flatMap((part) => {
+          const match = part.match(/^[[(]\s*([0-9٠-٩]+)\s*[\])]$/);
+          const id = match ? normalizeArabicNumber(match[1] ?? "") : Number.NaN;
+          if (!footnoteById.has(id)) return [run(part, pt, bold)];
+          return [run("[", pt, bold), new FootnoteReferenceRun(id), run("]", pt, bold)];
+        });
       const border = { style: BorderStyle.DOUBLE, size: 12, color: "8A6A2F", space: 24 };
       const topOnly = TOP_ONLY_FRAME_STYLES.has(frameStyle);
       const headerMarks: Record<"study" | "lecture" | "annotation", string> = {
@@ -404,10 +451,24 @@ function ExportPage() {
           ...(block.dividerBefore
             ? { border: { top: { style: BorderStyle.SINGLE, size: 8, color: "8A6A2F", space: 8 } } }
             : {}),
-          children: [run(block.text, block.kind === "matn" ? size + 2 : size, block.kind === "matn")],
+           children: runsWithFootnotes(block.text, block.kind === "matn" ? size + 2 : size, block.kind === "matn"),
         }),
       );
       const doc = new Document({
+        footnotes: Object.fromEntries(
+          BOOK.footnotes.map((note) => [
+            note.id,
+            {
+              children: [
+                new Paragraph({
+                  bidirectional: true,
+                  alignment: AlignmentType.BOTH,
+                  children: [run(note.text, Math.max(9, size - 4))],
+                }),
+              ],
+            },
+          ]),
+        ),
         sections: [
           {
             properties: {
@@ -423,20 +484,6 @@ function ExportPage() {
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: "❁", color: "8A6A2F", size: 24 })] }),
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [run(BOOK.chapter, size + 3, true)] }),
               ...bodyParagraphs,
-              ...(BOOK.footnotes.length
-                ? [
-                    new Paragraph({
-                      bidirectional: true,
-                      spacing: { before: 400, after: 80 },
-                      indent: { left: 6000 },
-                      border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "8A6A2F", space: 1 } },
-                      children: [],
-                    }),
-                    ...BOOK.footnotes.map(
-                      (f) => new Paragraph({ bidirectional: true, alignment: AlignmentType.BOTH, spacing: { after: 60 }, children: [run(f, Math.max(9, size - 4))] }),
-                    ),
-                  ]
-                : []),
             ],
           },
         ],
@@ -646,8 +693,10 @@ function ExportPage() {
                     <div data-book-footnotes style={{ paddingTop: pxSize * 1.2 }}>
                       <FootnoteRule />
                       <div style={{ marginTop: pxSize * 0.4, fontSize: pxSize * 0.78, lineHeight: 1.7 }}>
-                        {BOOK.footnotes.map((f, i) => (
-                          <p key={i} style={{ textAlign: "justify", marginBottom: 2 }}>{f}</p>
+                        {BOOK.footnotes.map((footnote) => (
+                          <p key={footnote.id} data-book-footnote-id={footnote.id} style={{ textAlign: "justify", marginBottom: 2 }}>
+                            {footnote.label} {footnote.text}
+                          </p>
                         ))}
                       </div>
                     </div>
