@@ -61,8 +61,8 @@ function parseDocument(text: string, layoutStyle: LayoutStyle) {
       dividerPending = kind === "matn";
       cursor = index + match[0].length;
     }
-    append(content.slice(cursor), "body");
-    if (!matched) append(content, "body");
+    if (matched) append(content.slice(cursor), "body");
+    else append(content, "body");
   } else {
     append(content, "body");
   }
