@@ -150,7 +150,7 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
     const prepareContinuation = (element: HTMLElement) => {
       if (!continuation) return;
       element.style.textIndent = "0";
-      if (sourceParagraph.dataset.dividerBefore === "true") {
+      if (sourceParagraph.dataset["dividerBefore"] === "true") {
         element.style.borderTop = "none";
         element.style.paddingTop = "0";
         element.style.marginTop = "0";
