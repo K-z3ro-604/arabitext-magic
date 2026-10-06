@@ -28,11 +28,49 @@ const SAMPLE_TEXT = `إنَّ الكتابةَ الصحيحةَ مهمةٌ جد�
 
 const FOOTNOTE_RE = /^\s*[[(]\s*[0-9٠-٩]+\s*[\])]\s*/;
 
-function parseDocument(text: string) {
-  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+type LayoutStyle = "standard" | "badr";
+type BookBlock = {
+  kind: "body" | "matn" | "sharh";
+  text: string;
+  dividerBefore?: boolean;
+};
+
+function parseDocument(text: string, layoutStyle: LayoutStyle) {
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const footnotes = lines.filter((line) => FOOTNOTE_RE.test(line));
+  const content = lines.filter((line) => !FOOTNOTE_RE.test(line)).join("\n");
+  const blocks: BookBlock[] = [];
+
+  const append = (value: string, kind: BookBlock["kind"], dividerBefore = false) => {
+    value.split(/\n+/).map((line) => line.trim()).filter(Boolean).forEach((line, index) => {
+      blocks.push({ kind, text: line, dividerBefore: dividerBefore && index === 0 });
+    });
+  };
+
+  if (layoutStyle === "badr") {
+    const taggedBlock = /\[(متن|شرح)\]([\s\S]*?)\[\/\1\]/g;
+    let cursor = 0;
+    let matched = false;
+    let dividerPending = false;
+    for (const match of content.matchAll(taggedBlock)) {
+      matched = true;
+      const index = match.index ?? cursor;
+      append(content.slice(cursor, index), "body");
+      const kind = match[1] === "متن" ? "matn" : "sharh";
+      append(match[2] ?? "", kind, kind === "sharh" && dividerPending);
+      dividerPending = kind === "matn";
+      cursor = index + match[0].length;
+    }
+    if (matched) append(content.slice(cursor), "body");
+    else append(content, "body");
+  } else {
+    append(content, "body");
+  }
+
   return {
-    paragraphs: lines.filter((l) => !FOOTNOTE_RE.test(l)),
-    footnotes: lines.filter((l) => FOOTNOTE_RE.test(l)),
+    blocks,
+    paragraphs: blocks.map((block) => block.text),
+    footnotes,
   };
 }
 
@@ -109,10 +147,20 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
     let remaining = sourceParagraph.textContent?.trim().split(/\s+/).filter(Boolean) ?? [];
     let continuation = false;
 
+    const prepareContinuation = (element: HTMLElement) => {
+      if (!continuation) return;
+      element.style.textIndent = "0";
+      if (sourceParagraph.dataset["dividerBefore"] === "true") {
+        element.style.borderTop = "none";
+        element.style.paddingTop = "0";
+        element.style.marginTop = "0";
+      }
+    };
+
     while (remaining.length > 0) {
       const full = sourceParagraph.cloneNode(true) as HTMLElement;
       full.textContent = remaining.join(" ");
-      if (continuation) full.style.textIndent = "0";
+      prepareContinuation(full);
       body.appendChild(full);
       if (pageFits(page)) break;
       full.remove();
@@ -125,7 +173,7 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
         const candidate = sourceParagraph.cloneNode(true) as HTMLElement;
         candidate.textContent = remaining.slice(0, middle).join(" ");
         candidate.style.marginBottom = "0";
-        if (continuation) candidate.style.textIndent = "0";
+        prepareContinuation(candidate);
         body.appendChild(candidate);
         const fits = pageFits(page);
         candidate.remove();
@@ -141,7 +189,7 @@ function buildPdfPages(template: HTMLElement, holder: HTMLElement) {
         const fragment = sourceParagraph.cloneNode(true) as HTMLElement;
         fragment.textContent = remaining.slice(0, best).join(" ");
         fragment.style.marginBottom = "0";
-        if (continuation) fragment.style.textIndent = "0";
+        prepareContinuation(fragment);
         body.appendChild(fragment);
         remaining = remaining.slice(best);
         continuation = true;
@@ -179,6 +227,7 @@ function ExportPage() {
   const [margin, setMargin] = useState(25); // mm
   const [lineHeight, setLineHeight] = useState(1.8);
   const [frameStyle, setFrameStyle] = useState<BookFrameStyle>("classic");
+  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>("standard");
   const [title, setTitle] = useState("رسالة في فن الكتابة");
   const [chapter, setChapter] = useState("الباب الأول: في فضل العلم");
   const [text, setText] = useState(SAMPLE_TEXT);
@@ -214,8 +263,8 @@ function ExportPage() {
   };
 
   const aiReady = noteMode === "ai" && aiText?.source === text;
-  const effectiveText = aiReady ? aiText!.result : text;
-  const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(effectiveText) }), [title, chapter, effectiveText]);
+  const effectiveText = aiReady && aiText ? aiText.result : text;
+  const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(effectiveText, layoutStyle) }), [title, chapter, effectiveText, layoutStyle]);
   const slugName = (ext: string) => `${(title || "كتاب").replace(/\s+/g, "-")}.${ext}`;
   const padding = Math.max(margin * MM, 72);
 
@@ -250,7 +299,7 @@ function ExportPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [BOOK, font, size, lineHeight, padding, frameStyle]);
+  }, [BOOK, font, size, lineHeight, padding, frameStyle, layoutStyle]);
 
   const exportPdf = async () => {
     const template = pageRef.current;
@@ -342,6 +391,22 @@ function ExportPage() {
           })
         : undefined;
       const pageMargin = twip(Math.max(margin, 22));
+      const bodyParagraphs = BOOK.blocks.map((block) =>
+        new Paragraph({
+          bidirectional: true,
+          alignment: AlignmentType.BOTH,
+          indent: { firstLine: block.kind === "matn" ? 0 : 567 },
+          spacing: {
+            line,
+            before: block.dividerBefore ? 240 : 0,
+            after: block.kind === "matn" ? 220 : 160,
+          },
+          ...(block.dividerBefore
+            ? { border: { top: { style: BorderStyle.SINGLE, size: 8, color: "8A6A2F", space: 8 } } }
+            : {}),
+          children: [run(block.text, block.kind === "matn" ? size + 2 : size, block.kind === "matn")],
+        }),
+      );
       const doc = new Document({
         sections: [
           {
@@ -357,16 +422,7 @@ function ExportPage() {
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [run(BOOK.title, size + 10, true)] }),
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: "❁", color: "8A6A2F", size: 24 })] }),
               new Paragraph({ bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [run(BOOK.chapter, size + 3, true)] }),
-              ...BOOK.paragraphs.map(
-                (p) =>
-                  new Paragraph({
-                    bidirectional: true,
-                    alignment: AlignmentType.BOTH,
-                    indent: { firstLine: 567 },
-                    spacing: { line, after: 160 },
-                    children: [run(p, size)],
-                  }),
-              ),
+              ...bodyParagraphs,
               ...(BOOK.footnotes.length
                 ? [
                     new Paragraph({
@@ -478,6 +534,21 @@ function ExportPage() {
               </span>
             )}
           </Control>
+          <Control icon={<BookOpen className="size-4 text-brand" />} label="نمط المتن والشرح">
+            <select
+              value={layoutStyle}
+              onChange={(event) => setLayoutStyle(event.target.value as LayoutStyle)}
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="standard">تنسيق النص المعتاد</option>
+              <option value="badr">نمط المتن والشرح (البدر الطالع)</option>
+            </select>
+            {layoutStyle === "badr" && (
+              <span className="text-[11px] leading-relaxed text-muted-foreground">
+                استخدم [متن]...[/متن] ثم [شرح]...[/شرح] لإظهار المتن بارزًا والشرح تحته.
+              </span>
+            )}
+          </Control>
           <Slider icon={<Baseline className="size-4 text-brand" />} label="حجم الخط" value={size} min={11} max={24} step={1} unit="نقطة" onChange={setSize} />
           <Slider icon={<Maximize className="size-4 text-brand" />} label="هوامش الصفحة" value={margin} min={10} max={40} step={1} unit="مم" onChange={setMargin} />
           <Slider icon={<AlignJustify className="size-4 text-brand" />} label="تباعد الأسطر" value={lineHeight} min={1.2} max={2.6} step={0.1} unit="×" onChange={setLineHeight} />
@@ -550,8 +621,24 @@ function ExportPage() {
                       {BOOK.chapter}
                     </h2>
                   </div>
-                  {BOOK.paragraphs.map((p, i) => (
-                    <p data-book-paragraph key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
+                  {BOOK.blocks.map((block, i) => (
+                    <p
+                      data-book-paragraph
+                      data-divider-before={block.dividerBefore ? "true" : undefined}
+                      key={`${block.kind}-${i}`}
+                      style={{
+                        textAlign: "justify",
+                        textIndent: block.kind === "matn" ? 0 : "1.5em",
+                        marginTop: block.dividerBefore ? pxSize * 0.8 : 0,
+                        marginBottom: block.kind === "matn" ? pxSize * 0.8 : pxSize * 0.6,
+                        paddingTop: block.dividerBefore ? pxSize * 0.75 : 0,
+                        borderTop: block.dividerBefore ? "1.5px solid #8a6a2f" : "none",
+                        fontSize: block.kind === "matn" ? pxSize * 1.12 : pxSize,
+                        fontWeight: block.kind === "matn" ? 700 : 400,
+                      }}
+                    >
+                      {block.text}
+                    </p>
                   ))}
                 </div>
                 <div data-book-footer style={{ marginTop: "auto" }}>
